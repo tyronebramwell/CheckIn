@@ -1,0 +1,120 @@
+@page "/find-member"
+@using SignUpCommon.Models
+@inject HttpClient HttpClient
+@inject AuthService AuthService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<PageTitle>Find Member</PageTitle>
+
+@if (!AuthService.IsLoggedIn)
+{
+    <MudAlert Severity="Severity.Info">Please login to access the system.</MudAlert>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Small">
+        <MudPaper Class="pa-6">
+            <MudText Typo="Typo.h4" Class="mb-4">Find Member</MudText>
+            @if (AuthService.CanAddUsers)
+            {
+                <div class="mb-6">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="@(() => NavigationManager.NavigateTo("/register-member"))">New Registration</MudButton>
+                </div>
+            }
+            
+            <MudTextField T="string" Value="_searchQuery" ValueChanged="OnSearchChanged" Label="Search by Name" Variant="Variant.Outlined" 
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" DebounceInterval="300" />
+            
+            <MudList T="Member" Class="mt-4">
+                @foreach (var member in _searchResults)
+                {
+                    <MudListItem OnClick="@(() => SelectMember(member))">
+                        <ChildContent>
+                            <div class="d-flex justify-space-between align-center">
+                                <div>
+                                    <MudText Typo="Typo.body1">@member.FirstName @member.LastName</MudText>
+                                    <MudText Typo="Typo.caption">DOB: @member.DateOfBirth.ToString("dd/MM/yyyy")</MudText>
+                                </div>
+                                <MudIcon Icon="@Icons.Material.Filled.ArrowForwardIos" Size="Size.Small" />
+                            </div>
+                        </ChildContent>
+                    </MudListItem>
+                }
+            </MudList>
+
+            @if (_selectedMember != null)
+            {
+                <MudDivider Class="my-6" />
+                <MudAlert Severity="Severity.Success" Class="mb-4">Selected: @_selectedMember.FirstName @_selectedMember.LastName</MudAlert>
+                <div class="d-flex justify-center flex-wrap gap-4">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" OnClick="CheckIn">Check In Now</MudButton>
+                    @if (AuthService.CanAddUsers)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Large" OnClick="@(() => NavigationManager.NavigateTo($"/edit-member/{_selectedMember.MemberId}"))">Edit Profile</MudButton>
+                    }
+                    <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Large" OnClick="() => _selectedMember = null">Cancel</MudButton>
+                </div>
+            }
+            
+            @if (_searchResults.Count == 0 && !string.IsNullOrWhiteSpace(_searchQuery) && !_isSearching)
+            {
+                 <MudAlert Severity="Severity.Warning" Class="mt-4">No member found. <MudLink Href="/register-member">Register them here.</MudLink></MudAlert>
+            }
+        </MudPaper>
+    </MudContainer>
+}
+
+@code {
+    private string _searchQuery = "";
+    private List<Member> _searchResults = new();
+    private Member? _selectedMember;
+    private bool _isSearching = false;
+
+    private async Task OnSearchChanged(string query)
+    {
+        _searchQuery = query;
+        if (string.IsNullOrWhiteSpace(_searchQuery))
+        {
+            _searchResults.Clear();
+            _selectedMember = null;
+            return;
+        }
+        await SearchMembers();
+    }
+
+    private async Task SearchMembers()
+    {
+        _isSearching = true;
+        var response = await HttpClient.GetAsync($"/api/members?search={_searchQuery}");
+        if (response.IsSuccessStatusCode)
+        {
+            _searchResults = await response.Content.ReadFromJsonAsync<List<Member>>() ?? new();
+        }
+        _isSearching = false;
+    }
+
+    private void SelectMember(Member member)
+    {
+        _selectedMember = member;
+    }
+
+    private async Task CheckIn()
+    {
+        if (_selectedMember == null) return;
+
+        var response = await HttpClient.PostAsJsonAsync("/api/attendance/check-in", new { memberId = _selectedMember.MemberId });
+        if (response.IsSuccessStatusCode)
+        {
+            Snackbar.Add($"Checked in {_selectedMember.FirstName}", Severity.Success);
+            _selectedMember = null;
+            _searchQuery = "";
+            _searchResults.Clear();
+            NavigationManager.NavigateTo("/RecordView");
+        }
+        else
+        {
+            Snackbar.Add("Check-in failed", Severity.Error);
+        }
+    }
+}

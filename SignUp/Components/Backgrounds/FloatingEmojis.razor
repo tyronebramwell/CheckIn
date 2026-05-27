@@ -1,0 +1,133 @@
+@implements IDisposable
+@inject IJSRuntime JSRuntime
+
+<style>
+    .floating-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        overflow: hidden;
+    }
+
+    .interactive-emoji {
+        position: absolute;
+        font-size: 3rem;
+        transition: all 0.2s ease-out;
+        user-select: none;
+    }
+</style>
+
+<div class="floating-container">
+    @foreach (var e in _emojis)
+    {
+        <div class="interactive-emoji" style="left: @(e.X)%; top: @(e.Y)%; transform: rotate(@(e.Rotation)deg);">
+            @e.Symbol
+        </div>
+    }
+</div>
+
+@code {
+    private List<EmojiState> _emojis = new();
+    private string[] _symbols = { "😊", "🎉", "🔥", "🚀", "🌈", "⭐", "🍕", "🍦", "🎈", "🐱", "🐶", "🦄", "💖", "🍦", "🍩", "✨", "🌟", "👾", "🤖" };
+    private System.Timers.Timer? _loopTimer;
+    private Random _rand = new();
+
+    private class EmojiState {
+        public string Symbol { get; set; } = "";
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double VX { get; set; } // Velocity
+        public double VY { get; set; }
+        public double Rotation { get; set; }
+        public double TargetX { get; set; }
+        public double TargetY { get; set; }
+    }
+
+    protected override void OnInitialized()
+    {
+        // Initialize 50 emojis at random positions
+        for (int i = 0; i < 500; i++)
+        {
+            _emojis.Add(new EmojiState {
+                Symbol = _symbols[_rand.Next(_symbols.Length)],
+                X = _rand.Next(5, 95),
+                Y = _rand.Next(5, 95),
+                VX = (_rand.NextDouble() - 0.5) * 0.2,
+                VY = (_rand.NextDouble() - 0.5) * 0.2,
+                Rotation = _rand.Next(0, 360)
+            });
+        }
+
+        _loopTimer = new System.Timers.Timer(100); // 10fps is enough for this
+        _loopTimer.Elapsed += async (s, e) => await UpdateLoop();
+        _loopTimer.Start();
+    }
+
+    private async Task UpdateLoop()
+    {
+        try 
+        {
+            var motionPoints = await JSRuntime.InvokeAsync<List<MotionPoint>>("motionHelper.getMotionMap", 15);
+            
+            foreach (var emoji in _emojis)
+            {
+                // Basic floating movement
+                emoji.X += emoji.VX;
+                emoji.Y += emoji.VY;
+
+                // Bounce off edges
+                if (emoji.X < 0 || emoji.X > 100) emoji.VX *= -1;
+                if (emoji.Y < 0 || emoji.Y > 100) emoji.VY *= -1;
+
+                // Interaction with motion
+                if (motionPoints != null)
+                {
+                    foreach (var point in motionPoints)
+                    {
+                        // Flip X because the camera is mirrored
+                        double correctedX = 100 - point.X;
+                        
+                        double dx = emoji.X - correctedX;
+                        double dy = emoji.Y - point.Y;
+                        double dist = Math.Sqrt(dx * dx + dy * dy);
+
+                        if (dist < 15) // Push distance
+                        {
+                            double pushFactor = (15 - dist) / 5;
+                            emoji.VX += (dx / dist) * pushFactor;
+                            emoji.VY += (dy / dist) * pushFactor;
+                        }
+                    }
+                }
+
+                // Friction to keep things from getting too crazy
+                emoji.VX *= 0.95;
+                emoji.VY *= 0.95;
+
+                // Add a little bit of random drift so they don't stop entirely
+                emoji.VX += (_rand.NextDouble() - 0.5) * 0.05;
+                emoji.VY += (_rand.NextDouble() - 0.5) * 0.05;
+                
+                emoji.Rotation += (emoji.VX + emoji.VY) * 10;
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { /* Handle potential race conditions during disposal */ }
+    }
+
+    public void Dispose()
+    {
+        _loopTimer?.Stop();
+        _loopTimer?.Dispose();
+    }
+
+    private class MotionPoint {
+        public double X { get; set; }
+        public double Y { get; set; }
+    }
+}

@@ -1,0 +1,82 @@
+@inject AuthService AuthService
+
+<style>
+    .circle-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        overflow: hidden;
+    }
+
+    .dropping-circle {
+        position: absolute;
+        border-radius: 50%;
+        animation: drop-animation 8s linear infinite;
+        top: -200px;
+    }
+
+    @@keyframes drop-animation {
+        0% { transform: translateY(0); opacity: 0; }
+        10% { opacity: 0.6; }
+        80% { opacity: 0.6; }
+        100% { transform: translateY(90vh); opacity: 0; }
+    }
+</style>
+
+@if (_showCircles)
+{
+    <div class="circle-container">
+        @foreach (var c in _circles)
+        {
+            <div class="dropping-circle" 
+                 style="width: @(c.Size)px; height: @(c.Size)px; left: @(c.Left)%; animation-delay: @(c.Delay)s; background: @(c.Color);">
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool _showCircles = false;
+    private List<CircleDef> _circles = new();
+
+    private class CircleDef {
+        public int Size { get; set; }
+        public int Left { get; set; }
+        public double Delay { get; set; }
+        public string? Color { get; set; }
+    }
+
+    protected override void OnInitialized()
+    {
+        InitializeCircles();
+        _showCircles = true;
+    }
+
+    private void InitializeCircles()
+    {
+        var rand = new Random();
+        var colors = new[] { 
+            "rgba(255, 99, 132, 0.6)", 
+            "rgba(54, 162, 235, 0.6)", 
+            "rgba(255, 206, 86, 0.6)", 
+            "rgba(75, 192, 192, 0.6)", 
+            "rgba(153, 102, 255, 0.6)",
+            "rgba(255, 159, 64, 0.6)",
+            "rgba(201, 203, 207, 0.6)"
+        };
+        
+        for (int i = 0; i < 200; i++)
+        {
+            _circles.Add(new CircleDef {
+                Size = rand.Next(30, 150),
+                Left = rand.Next(0, 95),
+                Delay = rand.NextDouble() * 5,
+                Color = colors[rand.Next(colors.Length)]
+            });
+        }
+    }
+}

@@ -1,0 +1,59 @@
+@page "/logs"
+@using SignUpCommon.Models
+@inject HttpClient HttpClient
+@inject AuthService AuthService
+@inject ISnackbar Snackbar
+
+<PageTitle>System Logs</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">System Logs</MudText>
+
+@if (!AuthService.IsLoggedIn || !AuthService.CanManageVolunteers)
+{
+    <MudAlert Severity="Severity.Error">Access Denied.</MudAlert>
+}
+else
+{
+    <MudDataGrid Items="@_logs" T="SystemLog" Filterable="true" SortMode="SortMode.Multiple" Hover="true">
+        <Columns>
+            <PropertyColumn Property="x => x.Timestamp" Title="Time" Format="dd/MM/yyyy HH:mm:ss" />
+            <PropertyColumn Property="x => x.User" Title="User" />
+            <PropertyColumn Property="x => x.Action" Title="Action" />
+            <TemplateColumn Title="Status">
+                <CellTemplate>
+                    @if (context.Item.IsError)
+                    {
+                        <MudChip T="string" Color="Color.Error" Size="Size.Small">Error</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Color="Color.Success" Size="Size.Small">Success</MudChip>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.IpAddress" Title="IP" />
+            <PropertyColumn Property="x => x.DeviceInfo" Title="Device" />
+        </Columns>
+    </MudDataGrid>
+}
+
+@code {
+    private List<SystemLog> _logs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthService.IsLoggedIn && AuthService.CanManageVolunteers)
+        {
+            await LoadLogs();
+        }
+    }
+
+    private async Task LoadLogs()
+    {
+        var response = await HttpClient.GetAsync("/api/logs");
+        if (response.IsSuccessStatusCode)
+        {
+            _logs = await response.Content.ReadFromJsonAsync<List<SystemLog>>() ?? new();
+        }
+    }
+}

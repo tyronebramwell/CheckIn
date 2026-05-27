@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:latest
+    container_name: charity_db
+    environment:
+      POSTGRES_DB: charity_event
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - ${DB_DATA_PATH:-./postgres_data}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: SignUpApi/Dockerfile
+    container_name: charity_api
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=db;Database=charity_event;Username=postgres;Password=password
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=https://+:443;http://+:80
+      - ASPNETCORE_HTTPS_PORT=5001
+      - ALLOW_PUBLIC_REGISTRATION=${ALLOW_PUBLIC_REGISTRATION:-false}
+      - ASPNETCORE_Kestrel__Certificates__Default__Password=${CERT_PASSWORD}
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=/https/aspnetapp.pfx
+    ports:
+      - "5000:80"
+      - "5001:443"
+    volumes:
+      - ${CERT_PATH}:/https:ro
+      - ${EXPORT_PATH:-./drive}:/app/drive
+    depends_on:
+      db:
+        condition: service_healthy
+
+  ui:
+    build:
+      context: .
+      dockerfile: SignUp/Dockerfile
+    container_name: charity_ui
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - api

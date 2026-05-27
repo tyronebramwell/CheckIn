@@ -1,0 +1,99 @@
+@implements IDisposable
+
+<style>
+    .emoji-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        overflow: hidden;
+    }
+
+    .falling-emoji {
+        position: absolute;
+        font-size: 2.5rem;
+        transition: top 1.5s cubic-bezier(0.47, 0, 0.745, 0.715), opacity 0.5s ease;
+    }
+</style>
+
+<div class="emoji-container">
+    @foreach (var e in _piledEmojis)
+    {
+        <div class="falling-emoji" style="left: @(e.Left)%; top: @(e.Top)vh; opacity: @e.Opacity;">
+            @e.Symbol
+        </div>
+    }
+</div>
+
+@code {
+    private List<EmojiItem> _piledEmojis = new();
+    private string[] _symbols = { "😊", "🎉", "🔥", "🚀", "🌈", "⭐", "🍕", "🍦", "🎈", "🐱", "🐶", "🦄", "💖", "🍦", "🍩","💩" };
+    private int[] _columnCounts = new int[15]; // 15 columns across the screen
+    private System.Timers.Timer? _spawnTimer;
+    private Random _rand = new();
+
+    private class EmojiItem {
+        public string Symbol { get; set; } = "";
+        public double Left { get; set; }
+        public double Top { get; set; }
+        public double Opacity { get; set; } = 1.0;
+    }
+
+    protected override void OnInitialized()
+    {
+        _spawnTimer = new System.Timers.Timer(600); // New emoji every 0.6s
+        _spawnTimer.Elapsed += (s, e) => {
+            SpawnEmoji();
+            InvokeAsync(StateHasChanged);
+        };
+        _spawnTimer.Start();
+    }
+
+    private void SpawnEmoji()
+    {
+        if (_piledEmojis.Count > 80) 
+        {
+            // Start fading out the oldest ones if we have too many
+            var oldest = _piledEmojis[0];
+            oldest.Opacity = 0;
+            _piledEmojis.RemoveAt(0);
+        }
+
+        int colIndex = _rand.Next(_columnCounts.Length);
+        
+        // Calculate target VH based on how many are already in this column
+        // Start piling at 90vh, each emoji takes about 5vh
+        double targetVh = 90 - (_columnCounts[colIndex] * 6);
+
+        if (targetVh < 20) // Reset column if it gets too high
+        {
+            _columnCounts[colIndex] = 0;
+            targetVh = 90;
+        }
+
+        var emoji = new EmojiItem {
+            Symbol = _symbols[_rand.Next(_symbols.Length)],
+            Left = (colIndex * 6.6) + _rand.Next(-1, 2),
+            Top = -10 // Start above screen
+        };
+
+        _piledEmojis.Add(emoji);
+        _columnCounts[colIndex]++;
+
+        // Animation trigger
+        _ = Task.Run(async () => {
+            await Task.Delay(50);
+            emoji.Top = targetVh;
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    public void Dispose()
+    {
+        _spawnTimer?.Stop();
+        _spawnTimer?.Dispose();
+    }
+}

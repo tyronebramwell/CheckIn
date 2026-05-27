@@ -1,0 +1,163 @@
+@implements IDisposable
+@inject IJSRuntime JSRuntime
+
+<style>
+    .terminator-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        overflow: hidden;
+        background-color: rgba(255, 0, 0, 0.15);
+    }
+
+    .red-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle, transparent 40%, rgba(150, 0, 0, 0.4) 100%);
+        box-shadow: inset 0 0 100px rgba(255, 0, 0, 0.5);
+    }
+
+    .hud-line {
+        position: absolute;
+        width: 100%;
+        height: 2px;
+        background: rgba(255, 0, 0, 0.3);
+        box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+        animation: scanline 4s linear infinite;
+    }
+
+    .targeting-reticle {
+        position: absolute;
+        width: 150px;
+        height: 150px;
+        border: 2px solid #FF0000;
+        box-shadow: 0 0 15px #FF0000;
+        transform: translate(-50%, -50%);
+        transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .reticle-corner {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        border: 4px solid #FF0000;
+    }
+    .top-left { top: -5px; left: -5px; border-right: 0; border-bottom: 0; }
+    .top-right { top: -5px; right: -5px; border-left: 0; border-bottom: 0; }
+    .bottom-left { bottom: -5px; left: -5px; border-right: 0; border-top: 0; }
+    .bottom-right { bottom: -5px; right: -5px; border-left: 0; border-top: 0; }
+
+    .hud-text {
+        position: absolute;
+        color: #FF0000;
+        font-family: 'Courier New', Courier, monospace;
+        font-weight: bold;
+        text-shadow: 0 0 5px #FF0000;
+        font-size: 1.2rem;
+    }
+
+    @@keyframes scanline {
+        0% { top: 0; }
+        100% { top: 100%; }
+    }
+
+    .blinking {
+        animation: blink 0.5s step-start infinite;
+    }
+
+    @@keyframes blink {
+        50% { opacity: 0; }
+    }
+</style>
+
+<div class="terminator-container">
+    <div class="red-overlay"></div>
+    <div class="hud-line"></div>
+    
+    <div class="hud-text" style="top: 20px; left: 20px;">
+        ANALYSIS: ACTIVE<br />
+        OBJECTIVE: CHECK-IN<br />
+        THREAT LEVEL: ZERO
+    </div>
+
+    <div class="hud-text" style="bottom: 20px; right: 20px; text-align: right;">
+        CPU: 6502 2.0MHz<br />
+        OS: SKYNET v2.4<br />
+        <span class="blinking">RECORDING...</span>
+    </div>
+
+    @if (_targetDetected)
+    {
+        <div class="targeting-reticle" style="left: @(_targetX)%; top: @(_targetY)%;">
+            <div class="reticle-corner top-left"></div>
+            <div class="reticle-corner top-right"></div>
+            <div class="reticle-corner bottom-left"></div>
+            <div class="reticle-corner bottom-right"></div>
+            <div class="hud-text" style="font-size: 0.8rem;">TARGET ACQUIRED</div>
+        </div>
+    }
+</div>
+
+@code {
+    private double _targetX = 50;
+    private double _targetY = 50;
+    private bool _targetDetected = false;
+    private System.Timers.Timer? _loopTimer;
+    private DateTime _lastDetectedTime = DateTime.MinValue;
+
+    protected override void OnInitialized()
+    {
+        _loopTimer = new System.Timers.Timer(150); 
+        _loopTimer.Elapsed += async (s, e) => await UpdateLoop();
+        _loopTimer.Start();
+    }
+
+    private async Task UpdateLoop()
+    {
+        try 
+        {
+            var motionPoints = await JSRuntime.InvokeAsync<List<MotionPoint>>("motionHelper.getMotionMap", 20);
+            
+            if (motionPoints != null && motionPoints.Any())
+            {
+                // Calculate centroid of motion
+                double avgX = motionPoints.Average(p => p.X);
+                double avgY = motionPoints.Average(p => p.Y);
+
+                // Mirror X for camera
+                _targetX = 100 - avgX;
+                _targetY = avgY;
+                _targetDetected = true;
+                _lastDetectedTime = DateTime.Now;
+            }
+            else if (_targetDetected && (DateTime.Now - _lastDetectedTime).TotalSeconds > 2)
+            {
+                _targetDetected = false;
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+    public void Dispose()
+    {
+        _loopTimer?.Stop();
+        _loopTimer?.Dispose();
+    }
+
+    private class MotionPoint {
+        public double X { get; set; }
+        public double Y { get; set; }
+    }
+}

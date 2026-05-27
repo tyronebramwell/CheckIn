@@ -1,0 +1,72 @@
+<style>
+    .bouncy-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        overflow: hidden;
+    }
+
+    .bouncy-ball {
+        position: absolute;
+        border-radius: 50%;
+        opacity: 0.6;
+        animation-timing-function: linear;
+        animation-iteration-count: infinite;
+    }
+
+    @@keyframes bounce-x {
+        from { left: 0; }
+        to { left: calc(100% - var(--ball-size)); }
+    }
+
+    @@keyframes bounce-y {
+        from { top: 0; }
+        to { top: calc(100% - var(--ball-size)); }
+    }
+</style>
+
+<div class="bouncy-container">
+    @foreach (var ball in _balls)
+    {
+        <div class="bouncy-ball" 
+             style="width: @(ball.Size)px; height: @(ball.Size)px; --ball-size: @(ball.Size)px; background: @(ball.Color);
+                    animation: bounce-x @(ball.DurationX)s alternate infinite, bounce-y @(ball.DurationY)s alternate infinite;
+                    animation-delay: -@(ball.Delay)s;">
+        </div>
+    }
+</div>
+
+@code {
+    private List<BallDef> _balls = new();
+
+    private class BallDef {
+        public int Size { get; set; }
+        public double DurationX { get; set; }
+        public double DurationY { get; set; }
+        public double Delay { get; set; }
+        public string Color { get; set; } = "";
+    }
+
+    protected override void OnInitialized()
+    {
+        var rand = new Random();
+        var colors = new[] { 
+            "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF", "#FF9F40"
+        };
+        
+        for (int i = 0; i < 100; i++)
+        {
+            _balls.Add(new BallDef {
+                Size = rand.Next(40, 100),
+                DurationX = rand.NextDouble() * 5 + 5,
+                DurationY = rand.NextDouble() * 5 + 5,
+                Delay = rand.NextDouble() * 10,
+                Color = colors[rand.Next(colors.Length)]
+            });
+        }
+    }
+}

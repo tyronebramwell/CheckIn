@@ -1,0 +1,62 @@
+<div style="transition: opacity 1s ease-in-out;">
+    @switch (_currentIndex)
+    {
+        case 0:
+            <SpaceInvaders />
+            break;
+        case 1:
+            <RollingShutter />
+            break;
+        case 2:
+            <TerminatorHUD />
+            break;
+        case 3:
+            <RippleCircles />
+            break;
+        case 4:
+            <FrostedGlass />
+            break;
+        case 5:
+            <FloatingEmojis />
+            break;
+        case 6:
+            <DroppingCircles />
+            break;
+        case 7:
+            <BouncyBalls />
+            break;
+        case 8:
+            <RetroSnake />
+            break;
+        case 9:
+            <ScanLines />
+            break;
+        case 10:
+            <HackerMatrix />
+            break;
+        case 11:
+            <EmojiPile />
+            break;
+        }
+        </div>
+
+        @code {
+        private int _currentIndex = 0;
+        private System.Timers.Timer? _timer;
+
+        protected override void OnInitialized()
+        {
+        // Reduce rotation to 30 seconds for more variety
+        _timer = new System.Timers.Timer(30000); 
+        _timer.Elapsed += (s, e) => {
+            _currentIndex = (_currentIndex + 1) % 12;
+            InvokeAsync(StateHasChanged);
+        };
+        _timer.Start();
+        }
+    public void Dispose()
+    {
+        _timer?.Stop();
+        _timer?.Dispose();
+    }
+}

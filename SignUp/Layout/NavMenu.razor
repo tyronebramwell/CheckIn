@@ -1,0 +1,40 @@
+@implements IDisposable
+@inject AuthService AuthService
+
+<MudNavMenu>
+    @if (AuthService.IsLoggedIn)
+    {
+        <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
+        
+        @if (AuthService.CanViewData)
+        {
+            <MudNavLink Href="/find-member" Icon="@Icons.Material.Filled.PersonSearch">Find Member</MudNavLink>
+            <MudNavLink Href="/MemberRoster" Icon="@Icons.Material.Filled.People">Member Roster</MudNavLink>
+            <MudNavLink Href="/RecordView" Icon="@Icons.Material.Filled.RunningWithErrors">Active</MudNavLink>
+            <MudNavLink Href="/AttendanceHistory" Icon="@Icons.Material.Filled.History">History</MudNavLink>
+        }
+
+        @if (AuthService.CanAddUsers)
+        {
+            <MudNavLink Href="/register-member" Icon="@Icons.Material.Filled.PersonAdd">Registration</MudNavLink>
+        }
+
+        @if (AuthService.CanManageVolunteers)
+        {
+            <MudNavLink Href="/admin" Icon="@Icons.Material.Filled.AdminPanelSettings">Admin</MudNavLink>
+            <MudNavLink Href="/logs" Icon="@Icons.Material.Filled.ListAlt">System Logs</MudNavLink>
+        }
+    }
+</MudNavMenu>
+
+@code {
+    protected override void OnInitialized()
+    {
+        AuthService.OnAuthStateChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        AuthService.OnAuthStateChanged -= StateHasChanged;
+    }
+}

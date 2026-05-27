@@ -1,0 +1,76 @@
+<style>
+    .matrix-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        overflow: hidden;
+    }
+
+    .matrix-column {
+        position: absolute;
+        color: #00FF41;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 1.2rem;
+        font-weight: bold;
+        text-shadow: 0 0 8px #00FF41;
+        writing-mode: vertical-rl;
+        text-orientation: upright;
+        animation: matrix-fall linear infinite;
+        top: -500px;
+        white-space: nowrap;
+    }
+
+    @@keyframes matrix-fall {
+        0% { transform: translateY(0); opacity: 0; }
+        5% { opacity: 1; }
+        95% { opacity: 1; }
+        100% { transform: translateY(120vh); opacity: 0; }
+    }
+</style>
+
+<div class="matrix-container">
+    @foreach (var col in _columns)
+    {
+        <div class="matrix-column" 
+             style="animation-duration: @(col.Speed)s; animation-delay: @(col.Delay)s; left: @(col.Left)%;">
+            @col.Content
+        </div>
+    }
+</div>
+
+@code {
+    private List<ColumnDef> _columns = new();
+    private const string Chars = "アカサタナハマヤラワガザダバパイキシチニヒミリヰギジヂビピウクスツヌフムユルグズヅブプエケセテネヘメレヱゲゼデベペオコソトノホモヨロヲゴゾドボポ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    private class ColumnDef {
+        public double Speed { get; set; }
+        public double Delay { get; set; }
+        public int Left { get; set; }
+        public string Content { get; set; } = "";
+    }
+
+    protected override void OnInitialized()
+    {
+        var rand = new Random();
+        for (int i = 0; i < 40; i++)
+        {
+            var length = rand.Next(15, 35);
+            var contentBuilder = new System.Text.StringBuilder();
+            for (int j = 0; j < length; j++)
+            {
+                contentBuilder.Append(Chars[rand.Next(Chars.Length)]);
+            }
+
+            _columns.Add(new ColumnDef {
+                Speed = rand.NextDouble() * 4 + 3,
+                Delay = rand.NextDouble() * -10, // Negative delay to start at different positions
+                Left = rand.Next(0, 100),
+                Content = contentBuilder.ToString()
+            });
+        }
+    }
+}

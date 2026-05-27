@@ -1,0 +1,50 @@
+@implements IDisposable
+@inject IJSRuntime JSRuntime
+
+<style>
+    .slit-scan-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        overflow: hidden;
+    }
+
+    #slitScanCanvas {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transform: scaleX(-1); /* Mirror to match other backgrounds */
+    }
+</style>
+
+<div class="slit-scan-container">
+    <canvas id="slitScanCanvas"></canvas>
+</div>
+
+@code {
+    private System.Timers.Timer? _timer;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("slitScanHelper.init", "slitScanCanvas");
+            
+            _timer = new System.Timers.Timer(30); // ~33fps for smooth scanning
+            _timer.Elapsed += async (s, e) => {
+                await JSRuntime.InvokeVoidAsync("slitScanHelper.update");
+            };
+            _timer.Start();
+        }
+    }
+
+    public void Dispose()
+    {
+        _timer?.Stop();
+        _timer?.Dispose();
+    }
+}

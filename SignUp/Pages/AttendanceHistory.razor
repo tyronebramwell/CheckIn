@@ -1,0 +1,111 @@
+@page "/AttendanceHistory"
+@using SignUpCommon.Models
+@inject HttpClient HttpClient
+@inject AuthService AuthService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<PageTitle>Attendance History</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Attendance History</MudText>
+
+<div class="mb-6 d-flex align-center gap-4">
+    <MudDatePicker Label="Select Date" Date="_selectedDate" DateChanged="OnDateChanged" Variant="Variant.Outlined" Style="max-width: 300px" />
+    @if (AuthService.CanManageVolunteers)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Info" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportToCsv" Class="mt-1">Export to CSV</MudButton>
+    }
+</div>
+
+@if (!AuthService.IsLoggedIn || !AuthService.CanViewData)
+{
+    <MudAlert Severity="Severity.Error">Access Denied.</MudAlert>
+}
+else
+{
+    <MudDataGrid Items="@_historyLogs" T="AttendanceHistoryDto" Filterable="true" SortMode="SortMode.Multiple" Hover="true">
+        <Columns>
+            <PropertyColumn Property="x => x.FirstName" Title="First Name" />
+            <PropertyColumn Property="x => x.LastName" Title="Last Name" />
+            <PropertyColumn Property="x => x.CheckInTime" Title="Check-In" Format="dd/MM/yyyy HH:mm" />
+            <PropertyColumn Property="x => x.CheckOutTime" Title="Check-Out" Format="dd/MM/yyyy HH:mm" />
+            <TemplateColumn Title="Status">
+                <CellTemplate>
+                    @if (context.Item.CheckOutTime == null)
+                    {
+                        <MudChip T="string" Color="Color.Success" Size="Size.Small">On-Site</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Color="Color.Default" Size="Size.Small">Checked Out</MudChip>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn CellClass="d-flex justify-end">
+                <CellTemplate>
+                    <MudIconButton Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Primary" OnClick="@(() => ViewProfile(context.Item.MemberId))" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+    </MudDataGrid>
+}
+
+@code {
+    private List<AttendanceHistoryDto> _historyLogs = new();
+    private DateTime? _selectedDate = DateTime.Today;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthService.IsLoggedIn && AuthService.CanViewData)
+        {
+            await LoadHistory();
+        }
+    }
+
+    private async Task OnDateChanged(DateTime? newDate)
+    {
+        _selectedDate = newDate;
+        await LoadHistory();
+    }
+
+    private async Task LoadHistory()
+    {
+        var dateQuery = _selectedDate.HasValue ? $"?date={_selectedDate.Value:yyyy-MM-dd}" : "";
+        var response = await HttpClient.GetAsync($"/api/attendance/history{dateQuery}");
+        if (response.IsSuccessStatusCode)
+        {
+            _historyLogs = await response.Content.ReadFromJsonAsync<List<AttendanceHistoryDto>>() ?? new();
+        }
+    }
+
+    private void ViewProfile(Guid memberId)
+    {
+        NavigationManager.NavigateTo($"/edit-member/{memberId}");
+    }
+
+    private async Task ExportToCsv()
+    {
+        var dateQuery = _selectedDate.HasValue ? $"?date={_selectedDate.Value:yyyy-MM-dd}" : "";
+        var response = await HttpClient.GetAsync($"/api/attendance/export{dateQuery}");
+        if (response.IsSuccessStatusCode)
+        {
+            var result = await response.Content.ReadFromJsonAsync<ExportResponse>();
+            Snackbar.Add($"Exported {result?.recordCount} records to {result?.fileName}", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Export failed.", Severity.Error);
+        }
+    }
+
+    public record ExportResponse(string fileName, string filePath, int recordCount);
+
+    public record AttendanceHistoryDto(
+        Guid LogId,
+        Guid MemberId,
+        string FirstName,
+        string LastName,
+        DateTime CheckInTime,
+        DateTime? CheckOutTime,
+        string Guardian1Phone);
+}

@@ -1,0 +1,114 @@
+@implements IDisposable
+@inject IJSRuntime JSRuntime
+
+<style>
+    .ripple-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        overflow: hidden;
+    }
+
+    .ripple-circle {
+        position: absolute;
+        border-radius: 50%;
+        border: 10px solid;
+        transition: transform 3s ease-out, opacity 3s ease-out;
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 1;
+    }
+    
+    .ripple-active {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0;
+    }
+</style>
+
+<div class="ripple-container">
+    @foreach (var r in _ripples)
+    {
+        <div class="ripple-circle @(r.IsActive ? "ripple-active" : "")" 
+             style="left: @(r.X)%; top: @(r.Y)%; width: @(r.Size)px; height: @(r.Size)px; border-color: @(r.Color);">
+        </div>
+    }
+</div>
+
+@code {
+    private List<RippleItem> _ripples = new();
+    private System.Timers.Timer? _loopTimer;
+    private Random _rand = new();
+    private string[] _colors = { "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF", "#FF9F40", "#00FF41" };
+
+    private class RippleItem {
+        public double X { get; set; }
+        public double Y { get; set; }
+        public int Size { get; set; }
+        public string Color { get; set; } = "";
+        public bool IsActive { get; set; } = false;
+        public DateTime Created { get; set; } = DateTime.Now;
+    }
+
+    protected override void OnInitialized()
+    {
+        _loopTimer = new System.Timers.Timer(200); 
+        _loopTimer.Elapsed += async (s, e) => await UpdateLoop();
+        _loopTimer.Start();
+    }
+
+    private async Task UpdateLoop()
+    {
+        try 
+        {
+            // 1. Cleanup old ripples
+            var now = DateTime.Now;
+            _ripples.RemoveAll(r => (now - r.Created).TotalSeconds > 3.2);
+
+            // 2. Poll motion
+            var motionPoints = await JSRuntime.InvokeAsync<List<MotionPoint>>("motionHelper.getMotionMap", 12);
+            
+            if (motionPoints != null && motionPoints.Any())
+            {
+                // To keep performance stable, only spawn from a few random motion points per frame
+                var samplePoints = motionPoints.OrderBy(x => _rand.Next()).Take(5);
+
+                foreach (var point in samplePoints)
+                {
+                    var ripple = new RippleItem {
+                        X = 100 - point.X, // Mirror
+                        Y = point.Y,
+                        Size = _rand.Next(50, 250),
+                        Color = _colors[_rand.Next(_colors.Length)],
+                        Created = DateTime.Now
+                    };
+                    
+                    _ripples.Add(ripple);
+                    
+                    // Trigger expansion in next tick
+                    _ = Task.Run(async () => {
+                        await Task.Delay(20);
+                        ripple.IsActive = true;
+                        await InvokeAsync(StateHasChanged);
+                    });
+                }
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+    public void Dispose()
+    {
+        _loopTimer?.Stop();
+        _loopTimer?.Dispose();
+    }
+
+    private class MotionPoint {
+        public double X { get; set; }
+        public double Y { get; set; }
+    }
+}

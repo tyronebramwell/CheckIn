@@ -1,0 +1,22 @@
+# .NET
+bin/
+obj/
+*.user
+*.userosscache
+*.sln.docstates
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+data/
+postgres_data/
+certs/
+drive/
+
+# OS
+.DS_Store
+Thumbs.db

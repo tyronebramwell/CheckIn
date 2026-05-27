@@ -1,0 +1,44 @@
+@inject HttpClient HttpClient
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>Add Volunteer</TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="_username" Label="Username" Variant="Variant.Outlined" />
+        <MudTextField @bind-Value="_password" Label="Password" Variant="Variant.Outlined" InputType="InputType.Password" Class="mt-4" />
+        <MudCheckBox @bind-Value="_canViewData" Label="Can View Data" />
+        <MudCheckBox @bind-Value="_canAddUsers" Label="Can Add Users" />
+        <MudCheckBox @bind-Value="_canManageVolunteers" Label="Can Manage Volunteers" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Create</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private string _username = "";
+    private string _password = "";
+    private bool _canViewData = true;
+    private bool _canAddUsers = false;
+    private bool _canManageVolunteers = false;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        var dto = new { Username = _username, Password = _password, CanViewData = _canViewData, CanAddUsers = _canAddUsers, CanManageVolunteers = _canManageVolunteers };
+        var response = await HttpClient.PostAsJsonAsync("/api/volunteers", dto);
+        if (response.IsSuccessStatusCode)
+        {
+            Snackbar.Add("Volunteer created", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Failed to create volunteer", Severity.Error);
+        }
+    }
+}

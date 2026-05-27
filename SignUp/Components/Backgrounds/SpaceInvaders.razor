@@ -1,0 +1,170 @@
+@implements IDisposable
+@inject IJSRuntime JSRuntime
+
+<style>
+    .space-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        overflow: hidden;
+        background: rgba(0, 0, 10, 0.2);
+    }
+
+    .alien {
+        position: absolute;
+        font-size: 2.5rem;
+        transition: all 0.2s linear, opacity 0.5s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .hit {
+        animation: explode 0.5s forwards;
+    }
+
+    @@keyframes explode {
+        0% { transform: scale(1); filter: brightness(5); }
+        100% { transform: scale(2); opacity: 0; filter: hue-rotate(90deg); }
+    }
+
+    .retro-text {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        color: #00FF41;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 1.5rem;
+        text-shadow: 0 0 10px #00FF41;
+    }
+</style>
+
+<div class="space-container">
+    @foreach (var a in _aliens)
+    {
+        <div class="alien @(a.IsHit ? "hit" : "")" 
+             style="left: @(a.X)%; top: @(a.Y)%; opacity: @(a.IsHit ? 0 : 0.8);">
+            @a.Symbol
+        </div>
+    }
+
+    <div class="retro-text">DEFENSE SYSTEM: @(_score)</div>
+</div>
+
+@code {
+    private List<Alien> _aliens = new();
+    private string[] _symbols = { "👾", "👽", "🛸", "👾" };
+    private System.Timers.Timer? _gameTimer;
+    private double _direction = 1; // 1 for right, -1 for left
+    private int _score = 0;
+    private Random _rand = new();
+
+    private class Alien {
+        public string Symbol { get; set; } = "";
+        public double X { get; set; }
+        public double Y { get; set; }
+        public bool IsHit { get; set; }
+        public DateTime HitTime { get; set; }
+    }
+
+    protected override void OnInitialized()
+    {
+        InitializeAliens();
+
+        _gameTimer = new System.Timers.Timer(150);
+        _gameTimer.Elapsed += async (s, e) => await GameLoop();
+        _gameTimer.Start();
+    }
+
+    private void InitializeAliens()
+    {
+        _aliens.Clear();
+        for (int row = 0; row < 4; row++)
+        {
+            for (int col = 0; col < 8; col++)
+            {
+                _aliens.Add(new Alien {
+                    Symbol = _symbols[row % _symbols.Length],
+                    X = 10 + (col * 10),
+                    Y = 10 + (row * 12)
+                });
+            }
+        }
+    }
+
+    private async Task GameLoop()
+    {
+        try 
+        {
+            // 1. Move Aliens
+            bool shiftDown = false;
+            foreach (var a in _aliens.Where(x => !x.IsHit))
+            {
+                a.X += (_direction * 1.5);
+                if (a.X > 90 || a.X < 5) shiftDown = true;
+            }
+
+            if (shiftDown)
+            {
+                _direction *= -1;
+                foreach (var a in _aliens.Where(x => !x.IsHit))
+                {
+                    a.Y += 3;
+                    if (a.Y > 80) InitializeAliens(); // Reset if they reach bottom
+                }
+            }
+
+            // 2. Respawn old hits
+            var now = DateTime.Now;
+            foreach (var a in _aliens.Where(x => x.IsHit))
+            {
+                if ((now - a.HitTime).TotalSeconds > 4)
+                {
+                    a.IsHit = false;
+                    // Reset to top row roughly
+                    a.Y = 10 + (_rand.Next(0, 4) * 12);
+                }
+            }
+
+            // 3. Collision with motion
+            var motionPoints = await JSRuntime.InvokeAsync<List<MotionPoint>>("motionHelper.getMotionMap", 15);
+            if (motionPoints != null)
+            {
+                foreach (var point in motionPoints)
+                {
+                    double correctedX = 100 - point.X; // Mirror
+                    
+                    var hitAlien = _aliens.FirstOrDefault(a => 
+                        !a.IsHit && 
+                        Math.Abs(a.X - correctedX) < 6 && 
+                        Math.Abs(a.Y - point.Y) < 8);
+
+                    if (hitAlien != null)
+                    {
+                        hitAlien.IsHit = true;
+                        hitAlien.HitTime = DateTime.Now;
+                        _score += 100;
+                    }
+                }
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+    public void Dispose()
+    {
+        _gameTimer?.Stop();
+        _gameTimer?.Dispose();
+    }
+
+    private class MotionPoint {
+        public double X { get; set; }
+        public double Y { get; set; }
+    }
+}
