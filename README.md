@@ -43,8 +43,8 @@ dotnet dev-certs https --trust
 The Nginx server used for the website requires standard certificate and key files. Use **OpenSSL** (available in Git Bash on Windows or Terminal on Mac) to extract them:
 
 ```bash
-openssl pkcs12 -in ./certs/aspnetapp.pfx -clcerts -nokeys -out ./certs/aspnetapp.crt -passin pass:Bra09094626!
-openssl pkcs12 -in ./certs/aspnetapp.pfx -nocerts -nodes -out ./certs/aspnetapp.key -passin pass:Bra09094626!
+openssl pkcs12 -in ./certs/aspnetapp.pfx -clcerts -nokeys -out ./certs/aspnetapp.crt -passin pass:MyPassword!
+openssl pkcs12 -in ./certs/aspnetapp.pfx -nocerts -nodes -out ./certs/aspnetapp.key -passin pass:MyPassword!
 ```
 
 ---
