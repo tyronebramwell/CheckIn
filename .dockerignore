@@ -3,10 +3,10 @@
 **/.vscode
 **/bin
 **/obj
-**/postgres_data
-**/data
-**/drive
-**/certs
+postgres_data/
+data/
+drive/
+certs/
 **/.env
 **/.DS_Store
 Thumbs.db

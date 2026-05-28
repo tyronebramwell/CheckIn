@@ -44,10 +44,12 @@ services:
       context: .
       dockerfile: CheckIn/Dockerfile
     container_name: charity_ui
+    environment:
+      - CERT_PASSWORD=${CERT_PASSWORD}
     ports:
       - "8080:80"
       - "8443:443"
     volumes:
-      - ./certs:/etc/nginx/certs:ro
+      - ./certs:/etc/nginx/certs
     depends_on:
       - api

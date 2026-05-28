@@ -16,11 +16,10 @@ WORKDIR /usr/share/nginx/html
 COPY --from=build /app/publish/wwwroot .
 COPY CheckIn/nginx.conf /etc/nginx/conf.d/default.conf
 
-# We will mount the certs folder in docker-compose, but we need a placeholder or 
-# a script to handle the conversion. For simplicity, we'll assume the .crt and .key are provided
-# or converted on the fly if we want to be fancy. 
-# Better: Just mount the folder and point to the files.
+# Setup the entrypoint script for auto-conversion
+COPY CheckIn/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 80
 EXPOSE 443
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/entrypoint.sh"]
