@@ -85,9 +85,18 @@
 
 @if (!AuthService.IsLoggedIn || AuthService.IsMember)
 {
-    <CameraStreamer @ref="_cameraStreamer"
-                    Autostart="true"
-                    Class="camera-background" />
+    <ErrorBoundary>
+        <ChildContent>
+            <CameraStreamer @ref="_cameraStreamer"
+                            Autostart="true"
+                            Class="camera-background" />
+        </ChildContent>
+        <ErrorContent>
+            <div style="position: fixed; top: 10px; right: 10px; z-index: 1000;">
+                <MudAlert Severity="Severity.Warning">Camera unavailable. Please ensure you are accessing the site via HTTPS.</MudAlert>
+            </div>
+        </ErrorContent>
+    </ErrorBoundary>
 
     <BackgroundSwitcher />
 }

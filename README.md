@@ -27,25 +27,17 @@ A privacy-by-design, local network system for managing charity event registratio
 
 ## 🔐 SSL Setup Guide (Mandatory)
 
-Because this system handles sensitive member and medical data, **HTTPS is strictly enforced**. You must generate and convert a local SSL certificate for the Docker containers to run correctly.
+Because this system handles sensitive member and medical data, **HTTPS is strictly enforced**. You must provide an SSL certificate for the Docker containers to run correctly.
 
-### Step 1: Generate the PFX Certificate
-In the root of the project, create a `certs` folder and generate the .NET development certificate. 
-**Important:** Use the password `MyPassword!` to match the provided configuration, or update your `.env` accordingly.
+### Provide your Custom Certificate
+In the root of the project, create a `certs` folder and place your `cert.pem` and `key.pem` files inside it.
 
 ```bash
 mkdir certs
-dotnet dev-certs https -ep ./certs/aspnetapp.pfx -p MyPassword!
-dotnet dev-certs https --trust
+# Copy your cert.pem and key.pem into this folder
 ```
 
-### Step 2: Convert to CRT/KEY for the UI Container
-The Nginx server used for the website requires standard certificate and key files. Use **OpenSSL** (available in Git Bash on Windows or Terminal on Mac) to extract them:
-
-```bash
-openssl pkcs12 -in ./certs/aspnetapp.pfx -clcerts -nokeys -out ./certs/aspnetapp.crt -passin pass:MyPassword!
-openssl pkcs12 -in ./certs/aspnetapp.pfx -nocerts -nodes -out ./certs/aspnetapp.key -passin pass:MyPassword!
-```
+The Nginx web server and the backend API will automatically load `cert.pem` and `key.pem` from the `./certs` directory when the containers are started.
 
 ---
 
