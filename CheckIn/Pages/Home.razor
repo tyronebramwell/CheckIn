@@ -1,0 +1,442 @@
+@page "/"
+@using System.Timers
+@using BlazorCameraStreamer
+@using CheckIn.Components.Backgrounds
+@inject AuthService AuthService
+@inject NavigationManager NavigationManager
+@inject HttpClient HttpClient
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Home</PageTitle>
+
+<style>
+    .burn-in-protection {
+        animation: color-cycle 20s infinite alternate;
+        z-index: 10;
+        height: 200px; 
+        width: 350px; 
+        font-size: 1.8rem; 
+        border-radius: 20px;
+    }
+
+    .qr-feedback-border {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border: 20px solid transparent;
+        box-shadow: inset 0 0 100px transparent;
+        pointer-events: none;
+        z-index: 5;
+        transition: all 0.3s ease-out;
+    }
+
+    .qr-feedback-border.success {
+        border-color: #00FF41;
+        box-shadow: inset 0 0 100px rgba(0, 255, 65, 0.5);
+    }
+
+    .qr-feedback-border.error {
+        border-color: #FF5252;
+        box-shadow: inset 0 0 100px rgba(255, 82, 82, 0.5);
+    }
+
+    .qr-action-message {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.85);
+        color: white;
+        padding: 3rem 5rem;
+        border-radius: 30px;
+        z-index: 20;
+        text-align: center;
+        box-shadow: 0 0 50px rgba(0, 0, 0, 0.6);
+        animation: message-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    /* Force the main layout to be transparent so we can see the camera */
+    .mud-main-content {
+        background-color: transparent !important;
+    }
+    
+    .mud-container {
+        background-color: transparent !important;
+    }
+
+    @@keyframes message-pop {
+        0% { transform: translate(-50%, -50%) scale(0.7); opacity: 0; }
+        100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    }
+
+    @@keyframes color-cycle {
+        0% { background-color: var(--mud-palette-primary); }
+        25% { background-color: var(--mud-palette-secondary); }
+        50% { background-color: var(--mud-palette-info); }
+        75% { background-color: var(--mud-palette-warning); }
+        100% { background-color: var(--mud-palette-success); }
+    }
+</style>
+
+@if (!AuthService.IsLoggedIn || AuthService.IsMember)
+{
+    <CameraStreamer @ref="_cameraStreamer"
+                    Autostart="true"
+                    Class="camera-background" />
+
+    <BackgroundSwitcher />
+}
+
+<div class="d-flex flex-column align-center justify-center" style="min-height: calc(100vh - 128px); width: 100%; position: relative; z-index: 1;">
+    @if (!AuthService.IsLoggedIn)
+    {
+        <div class="qr-feedback-border @(_actionResultClass)"></div>
+
+        @if (!string.IsNullOrEmpty(_actionMessage))
+        {
+            <div class="qr-action-message">
+                <MudIcon Icon="@(_actionResultClass == "success" ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Logout)" 
+                         Color="@(_actionResultClass == "success" ? Color.Success : Color.Error)" 
+                         Style="font-size: 8rem;" />
+                <MudText Typo="Typo.h2" Class="mt-6 font-weight-bold" Style="color: white;">@_actionMemberName</MudText>
+                <MudText Typo="Typo.h3" Class="mt-2 text-white">@_actionMessage</MudText>
+            </div>
+        }
+
+        <div class="d-flex gap-8 align-center">
+            <MudButton Variant="Variant.Filled" 
+                       Class="burn-in-protection"
+                       StartIcon="@Icons.Material.Filled.Login"
+                       IconSize="Size.Large"
+                       OnClick="@(() => NavigationManager.NavigateTo("/login"))">
+                Check In
+            </MudButton>
+
+            @if (_allowPublicRegistration)
+            {
+                <MudButton Variant="Variant.Filled" 
+                           Class="burn-in-protection"
+                           StartIcon="@Icons.Material.Filled.PersonAdd"
+                           IconSize="Size.Large"
+                           OnClick="@(() => NavigationManager.NavigateTo("/public-register"))">
+                    New Member
+                </MudButton>
+            }
+        </div>
+        
+        <MudPaper Class="mt-12 pa-4" Style="background: rgba(0,0,0,0.6); border-radius: 15px; z-index: 10;">
+            <MudText Typo="Typo.h5" Style="color: white; font-weight: bold;">
+                Show your QR code to the camera for instant Check-In/Out!
+            </MudText>
+        </MudPaper>
+    }
+    else if (AuthService.IsMember)
+    {
+        <div class="d-flex flex-column align-center justify-center" style="min-height: 80vh; z-index: 10;">
+            @if (_showSuccessMessage)
+            {
+                <MudPaper Class="pa-12 d-flex flex-column align-center" Elevation="4" Style="width: 100%; max-width: 500px; background: rgba(255,255,255,0.9);">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Large" Color="Color.Success" Style="font-size: 5rem;" />
+                    <MudText Typo="Typo.h3" Class="mt-6">Thank you!</MudText>
+                    <MudText Typo="Typo.h5" Class="mt-2 text-center">You have successfully @_successActionText.</MudText>
+                    <MudText Typo="Typo.body1" Class="mt-8">Logging you out automatically in @_countdown seconds...</MudText>
+                    <MudProgressLinear Color="Color.Success" Value="@(_countdown * 20)" Class="mt-6 w-100" />
+                    <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="LogoutNow" Class="mt-6">Logout Now</MudButton>
+                </MudPaper>
+            }
+            else
+            {
+                <MudPaper Class="pa-12 d-flex flex-column align-center" Elevation="4" Style="width: 100%; max-width: 600px; background: rgba(255,255,255,0.9);">
+                    <div class="d-flex justify-end w-100 mb-n10">
+                        <MudIconButton Icon="@Icons.Material.Filled.LockReset" Color="Color.Default" OnClick="OpenChangePasswordDialog" />
+                    </div>
+                    
+                    <MudIcon Icon="@Icons.Material.Filled.FlashOn" Size="Size.Large" Color="(_isMemberCheckedIn ? Color.Success : Color.Default)" Style="font-size: 5rem;" />
+                    <MudText Typo="Typo.h3" Class="mt-6">Welcome, @AuthService.Username!</MudText>
+                    <MudText Typo="Typo.h5" Class="mt-2 mb-10 text-center">
+                        Status: @(_isMemberCheckedIn ? "You are currently Checked In" : "You are currently Checked Out")
+                    </MudText>
+                    
+                    <div class="d-flex gap-8">
+                        @if (!_isMemberCheckedIn)
+                        {
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Style="height: 120px; width: 220px; font-size: 1.5rem;" StartIcon="@Icons.Material.Filled.Login" OnClick="SelfCheckIn">Check In</MudButton>
+                        }
+                        else
+                        {
+                            <MudButton Variant="Variant.Filled" Color="Color.Secondary" Style="height: 120px; width: 220px; font-size: 1.5rem;" StartIcon="@Icons.Material.Filled.Logout" OnClick="SelfCheckOut">Check Out</MudButton>
+                        }
+                    </div>
+
+                    <div class="mt-12 w-100">
+                        <MudText Typo="Typo.caption" Align="Align.Center" Class="d-block grey-text">Session will expire in @_countdown seconds</MudText>
+                        <MudProgressLinear Color="Color.Warning" Value="@(_countdown * 6.66)" Class="mt-2" />
+                    </div>
+                </MudPaper>
+            }
+        </div>
+    }
+    else if (AuthService.IsVolunteer)
+    {
+        <div style="width: 100%;">
+            <MudText Typo="Typo.h3" Align="Align.Center" GutterBottom="true">Volunteer Dashboard</MudText>
+            <MudGrid Class="mt-8">
+                <MudItem xs="12" sm="6">
+                    <MudPaper Class="pa-8 d-flex flex-column align-center" Elevation="4" Style="cursor: pointer" @onclick="@(() => NavigationManager.NavigateTo("/find-member"))">
+                        <MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Large" Color="Color.Primary" Style="font-size: 4rem;" />
+                        <MudText Typo="Typo.h5" Class="mt-4">Find Member</MudText>
+                        <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">Search the master roster and check in members.</MudText>
+                    </MudPaper>
+                </MudItem>
+                
+                <MudItem xs="12" sm="6">
+                    <MudPaper Class="pa-8 d-flex flex-column align-center" Elevation="4" Style="cursor: pointer" @onclick="@(() => NavigationManager.NavigateTo("/RecordView"))">
+                        <MudIcon Icon="@Icons.Material.Filled.RunningWithErrors" Size="Size.Large" Color="Color.Secondary" Style="font-size: 4rem;" />
+                        <MudText Typo="Typo.h5" Class="mt-4">Active Manifest</MudText>
+                        <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">View all members currently on-site.</MudText>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        </div>
+    }
+</div>
+
+@code {
+    private CameraStreamer? _cameraStreamer;
+    private bool _isMemberCheckedIn = false;
+    private bool _showSuccessMessage = false;
+    private string _successActionText = "";
+    private int _countdown = 15;
+    private bool _actionTaken = false;
+    private bool _allowPublicRegistration = false;
+    
+    private string _actionResultClass = "";
+    private string _actionMessage = "";
+    private string _actionMemberName = "";
+    private bool _isProcessingQrAction = false;
+    private System.Timers.Timer? _qrScanTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _ = LoadConfig(); // Fire and forget
+        
+        if (AuthService.IsLoggedIn && AuthService.IsMember)
+        {
+            await GetAttendanceStatus();
+            _ = StartInactivityTimer();
+        }
+        else if (!AuthService.IsLoggedIn)
+        {
+            StartQrScanning();
+        }
+    }
+
+    private void StartQrScanning()
+    {
+        _qrScanTimer = new System.Timers.Timer(300); 
+        _qrScanTimer.Elapsed += async (s, e) => {
+            if (AuthService.IsLoggedIn) return;
+            await ScanForQrCode();
+        };
+        _qrScanTimer.Start();
+    }
+
+    private async Task ScanForQrCode()
+    {
+        try {
+            var result = await JSRuntime.InvokeAsync<string>("qrHelper.decode");
+            
+            if (!string.IsNullOrEmpty(result)) {
+                if (!_isProcessingQrAction)
+                {
+                    var parts = result.Split('|');
+                    if (parts.Length == 2 && Guid.TryParse(parts[1], out var secret)) {
+                        _isProcessingQrAction = true;
+                        await HandleDirectQrAction(parts[0], secret);
+                    }
+                }
+            }
+            else
+            {
+                if (_isProcessingQrAction && string.IsNullOrEmpty(_actionMessage))
+                {
+                    _isProcessingQrAction = false;
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        } catch { /* Fail silently */ }
+    }
+
+    private async Task HandleDirectQrAction(string scannedUsername, Guid secret)
+    {
+        var response = await HttpClient.PostAsJsonAsync("/api/attendance/qr-action", new { username = scannedUsername, qrSecret = secret });
+
+        if (response.IsSuccessStatusCode)
+        {
+            var data = await response.Content.ReadFromJsonAsync<QrActionData>();
+            if (data != null)
+            {
+                _actionMemberName = !string.IsNullOrEmpty(data.Username) ? data.Username : scannedUsername;
+                
+                if (data.Action == "CheckedIn")
+                {
+                    _actionResultClass = "success";
+                    _actionMessage = "is now Checked In!";
+                }
+                else
+                {
+                    _actionResultClass = "error";
+                    _actionMessage = "is now Checked Out!";
+                }
+
+                await InvokeAsync(StateHasChanged);
+                
+                await Task.Delay(6000);
+                
+                _actionResultClass = "";
+                _actionMessage = "";
+                _actionMemberName = "";
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        else
+        {
+            _isProcessingQrAction = false;
+        }
+    }
+
+    private async Task LoadConfig()
+    {
+        try 
+        {
+            var config = await HttpClient.GetFromJsonAsync<ConfigResponse>("/api/config");
+            _allowPublicRegistration = config?.AllowPublic ?? false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { /* Fallback to false */ }
+    }
+
+    private async Task StartInactivityTimer()
+    {
+        while (_countdown > 0 && !_actionTaken)
+        {
+            await Task.Delay(1000);
+            if (!_actionTaken)
+            {
+                _countdown--;
+                StateHasChanged();
+            }
+        }
+
+        if (!_actionTaken)
+        {
+            LogoutNow();
+        }
+    }
+
+    private async Task OpenChangePasswordDialog()
+    {
+        _actionTaken = true; // Pause auto-logout while dialog is open
+        
+        var options = new DialogOptions { CloseOnEscapeKey = true };
+        var dialog = await DialogService.ShowAsync<MemberChangePasswordDialog>("Change Your Password", options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+             LogoutNow(); // Log them out for safety after password change
+        }
+        else
+        {
+            _actionTaken = false; // Resume timer
+            _countdown = 15;
+            _ = StartInactivityTimer();
+        }
+    }
+
+    private async Task GetAttendanceStatus()
+    {
+        var response = await HttpClient.GetFromJsonAsync<StatusResponse>("/api/attendance/self-status");
+        if (response != null)
+        {
+            _isMemberCheckedIn = response.IsActive;
+        }
+    }
+
+    private async Task SelfCheckIn()
+    {
+        _actionTaken = true;
+        var response = await HttpClient.PostAsync("/api/attendance/self-check-in", null);
+        if (response.IsSuccessStatusCode)
+        {
+            _successActionText = "checking in";
+            await StartPostActionCountdown();
+        }
+        else
+        {
+            _actionTaken = false;
+            Snackbar.Add("Check-in failed. Are you already checked in?", Severity.Warning);
+        }
+    }
+
+    private async Task SelfCheckOut()
+    {
+        _actionTaken = true;
+        var response = await HttpClient.PostAsync("/api/attendance/self-check-out", null);
+        if (response.IsSuccessStatusCode)
+        {
+            _successActionText = "checking out";
+            await StartPostActionCountdown();
+        }
+        else
+        {
+            _actionTaken = false;
+            var error = await response.Content.ReadAsStringAsync();
+            Snackbar.Add(error ?? "Check-out failed.", Severity.Error);
+        }
+    }
+
+    private async Task StartPostActionCountdown()
+    {
+        _showSuccessMessage = true;
+        _countdown = 5;
+        StateHasChanged();
+
+        while (_countdown > 0)
+        {
+            await Task.Delay(1000);
+            _countdown--;
+            StateHasChanged();
+        }
+
+        LogoutNow();
+    }
+
+    private void LogoutNow()
+    {
+        _actionTaken = true;
+        AuthService.Logout();
+        NavigationManager.NavigateTo("/");
+    }
+
+    public void Dispose()
+    {
+        _qrScanTimer?.Stop();
+        _qrScanTimer?.Dispose();
+    }
+
+    private record StatusResponse(bool IsActive);
+    private record ConfigResponse(bool AllowPublic);
+    public class QrActionData
+    {
+        public string Action { get; set; } = "";
+        public string Username { get; set; } = "";
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+    }
+}
+@inject IJSRuntime JSRuntime

@@ -65,9 +65,9 @@ dotnet dev-certs https --trust
 
 ## 📂 Project Structure
 
-- `SignUpApi/`: ASP.NET Core Minimal API.
-- `SignUpCommon/`: Shared Class Library for Data Models (POCOs).
-- `SignUp/`: Blazor WebAssembly Frontend.
+- `CheckInApi/`: ASP.NET Core Minimal API.
+- `CheckInCommon/`: Shared Class Library for Data Models (POCOs).
+- `CheckIn/`: Blazor WebAssembly Frontend.
 - `docker-compose.yml`: Infrastructure orchestration (API + PostgreSQL).
 
 ---

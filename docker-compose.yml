@@ -19,7 +19,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: SignUpApi/Dockerfile
+      dockerfile: CheckInApi/Dockerfile
     container_name: charity_api
     environment:
       - ConnectionStrings__DefaultConnection=Host=db;Database=charity_event;Username=postgres;Password=password
@@ -42,7 +42,7 @@ services:
   ui:
     build:
       context: .
-      dockerfile: SignUp/Dockerfile
+      dockerfile: CheckIn/Dockerfile
     container_name: charity_ui
     ports:
       - "8080:80"

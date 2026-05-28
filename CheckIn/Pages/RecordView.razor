@@ -1,0 +1,82 @@
+@page "/RecordView"
+@using CheckInCommon.Models
+@inject HttpClient HttpClient
+@inject AuthService AuthService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<PageTitle>Active Attendance</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Active Attendance</MudText>
+
+@if (!AuthService.IsLoggedIn || !AuthService.CanViewData)
+{
+    <MudAlert Severity="Severity.Error">Access Denied.</MudAlert>
+}
+else
+{
+    <MudDataGrid Items="@_activeLogs" T="ActiveAttendanceDto" Filterable="true" SortMode="SortMode.Multiple">
+        <Columns>
+            <PropertyColumn Property="x => x.FirstName" Title="First Name" />
+            <PropertyColumn Property="x => x.LastName" Title="Last Name" />
+            <PropertyColumn Property="x => x.CheckInTime" Title="Check-In Time" Format="dd/MM/yyyy HH:mm" />
+            <PropertyColumn Property="x => x.MedicalNotes" Title="Notes" />
+            <TemplateColumn CellClass="d-flex justify-end gap-2">
+                <CellTemplate>
+                    <MudIconButton Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Primary" OnClick="@(() => ViewProfile(context.Item.MemberId))" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="@(() => CheckOut(context.Item))">Check Out</MudButton>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+    </MudDataGrid>
+}
+
+@code {
+    private List<ActiveAttendanceDto> _activeLogs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthService.IsLoggedIn && AuthService.CanViewData)
+        {
+            await LoadActiveAttendance();
+        }
+    }
+
+    private async Task LoadActiveAttendance()
+    {
+        var response = await HttpClient.GetAsync("/api/attendance/active");
+        if (response.IsSuccessStatusCode)
+        {
+            _activeLogs = await response.Content.ReadFromJsonAsync<List<ActiveAttendanceDto>>() ?? new();
+        }
+    }
+
+    private void ViewProfile(Guid memberId)
+    {
+        NavigationManager.NavigateTo($"/edit-member/{memberId}");
+    }
+
+    private async Task CheckOut(ActiveAttendanceDto log)
+    {
+        var response = await HttpClient.PutAsJsonAsync("/api/attendance/check-out", new { logId = log.LogId });
+        if (response.IsSuccessStatusCode)
+        {
+            Snackbar.Add($"Checked out {log.FirstName}", Severity.Success);
+            await LoadActiveAttendance();
+        }
+        else
+        {
+            Snackbar.Add("Check-out failed", Severity.Error);
+        }
+    }
+
+    public record ActiveAttendanceDto(
+        Guid LogId,
+        Guid MemberId,
+        string FirstName,
+        string LastName,
+        string? MedicalNotes,
+        string Guardian1Phone,
+        string? Guardian2Phone,
+        DateTime CheckInTime);
+}

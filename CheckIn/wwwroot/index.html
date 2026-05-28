@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CheckIn</title>
+    <base href="/" />
+    <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link href="CheckIn.styles.css" rel="stylesheet" />
+    <script type="importmap"></script>
+    <script src="_content/BlazorCameraStreamer/js/CameraStreamer.js"></script>
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+    <!-- Important: Increment the version parameter whenever you update MudBlazor to prevent caching issues -->
+    <link href="_content/MudBlazor/MudBlazor.min.css?v=20260522" rel="stylesheet" />
+    
+    <!-- QR Decoding Library -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script>
+        window.qrHelper = {
+            decode: function () {
+                const video = document.querySelector('video');
+                if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) return "";
+
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const context = canvas.getContext('2d');
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                return code ? code.data : "";
+            }
+        };
+
+        window.motionHelper = {
+            prevData: null,
+            getMotionMap: function (gridSize = 10) {
+                const video = document.querySelector('video');
+                if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) return null;
+
+                const width = 160; // Low res for performance
+                const height = 120;
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, width, height);
+
+                const currentData = ctx.getImageData(0, 0, width, height).data;
+                const motionPoints = [];
+
+                if (this.prevData) {
+                    for (let y = 0; y < height; y += gridSize) {
+                        for (let x = 0; x < width; x += gridSize) {
+                            const offset = (y * width + x) * 4;
+                            const diff = Math.abs(currentData[offset] - this.prevData[offset]) +
+                                         Math.abs(currentData[offset+1] - this.prevData[offset+1]) +
+                                         Math.abs(currentData[offset+2] - this.prevData[offset+2]);
+                            
+                            if (diff > 100) { // Threshold for motion
+                                // Convert to percentages for CSS/Blazor use
+                                motionPoints.push({ x: (x / width) * 100, y: (y / height) * 100 });
+                            }
+                        }
+                    }
+                }
+
+                this.prevData = currentData;
+                return motionPoints;
+            }
+        };
+
+        window.slitScanHelper = {
+            canvas: null,
+            ctx: null,
+            scanLine: 0,
+            init: function (canvasId) {
+                this.canvas = document.getElementById(canvasId);
+                if (this.canvas) {
+                    this.ctx = this.canvas.getContext('2d');
+                    this.scanLine = 0;
+                    // Match window size
+                    this.canvas.width = window.innerWidth;
+                    this.canvas.height = window.innerHeight;
+                }
+            },
+            update: function () {
+                const video = document.querySelector('video');
+                if (!video || !this.ctx) return;
+
+                const vWidth = video.videoWidth;
+                const vHeight = video.videoHeight;
+                if (vWidth === 0) return;
+
+                const sliceHeight = 4; // Height of the scan slice
+                const destY = this.scanLine;
+                
+                // Calculate which part of the source video to grab
+                const sourceY = (destY / this.canvas.height) * vHeight;
+
+                // Draw the slice from video to canvas
+                this.ctx.drawImage(
+                    video, 
+                    0, sourceY, vWidth, sliceHeight, // Source
+                    0, destY, this.canvas.width, sliceHeight // Destination
+                );
+
+                // Move the scanline
+                this.scanLine = (this.scanLine + sliceHeight) % this.canvas.height;
+                
+                // Draw a small indicator line
+                this.ctx.fillStyle = 'rgba(0, 255, 65, 0.5)';
+                this.ctx.fillRect(0, this.scanLine, this.canvas.width, 2);
+            }
+        };
+    </script>
+</head>
+
+<body>
+    <div id="app">
+        <svg class="loading-progress">
+            <circle r="40%" cx="50%" cy="50%" />
+            <circle r="40%" cx="50%" cy="50%" />
+        </svg>
+        <div class="loading-progress-text"></div>
+    </div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+    <script src="_content/MudBlazor/MudBlazor.min.js?v=20260522"></script>
+    <script src="_framework/blazor.webassembly.js"></script>
+</body>
+
+</html>

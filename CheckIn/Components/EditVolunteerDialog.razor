@@ -1,0 +1,49 @@
+@inject HttpClient HttpClient
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>Edit Permissions</TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.h6">@Volunteer.Username</MudText>
+        <MudCheckBox @bind-Value="_canViewData" Label="Can View Data" />
+        <MudCheckBox @bind-Value="_canAddUsers" Label="Can Add Users" />
+        <MudCheckBox @bind-Value="_canManageVolunteers" Label="Can Manage Volunteers" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public CheckIn.Pages.Admin.VolunteerSummary Volunteer { get; set; } = null!;
+
+    private bool _canViewData;
+    private bool _canAddUsers;
+    private bool _canManageVolunteers;
+
+    protected override void OnInitialized()
+    {
+        _canViewData = Volunteer.CanViewData;
+        _canAddUsers = Volunteer.CanAddUsers;
+        _canManageVolunteers = Volunteer.CanManageVolunteers;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        var dto = new { CanViewData = _canViewData, CanAddUsers = _canAddUsers, CanManageVolunteers = _canManageVolunteers };
+        var response = await HttpClient.PutAsJsonAsync($"/api/volunteers/{Volunteer.VolunteerId}/permissions", dto);
+        if (response.IsSuccessStatusCode)
+        {
+            Snackbar.Add("Permissions updated", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Failed to update permissions", Severity.Error);
+        }
+    }
+}
