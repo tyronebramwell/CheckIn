@@ -67,6 +67,16 @@ If you encounter build errors on Windows, run these commands in PowerShell:
 
 ---
 
+## 🐳 Docker on Windows (WSL2)
+
+If you are using Docker Desktop with the WSL2 backend, please keep the following in mind:
+
+1.  **File System Performance:** For the fastest build times, it is highly recommended to clone this repository into your **WSL Home Directory** (e.g., `~/projects/CheckIn`) rather than on the Windows mount (`/mnt/c/...`).
+2.  **Build Context (.dockerignore):** I have included a `.dockerignore` file. This is **critical** on Windows to prevent local `bin` and `obj` folders from being copied into the Linux containers, which will cause the build to fail with "Multiple assemblies" or "Platform mismatch" errors.
+3.  **Line Endings:** Ensure your git is configured to handle line endings correctly (`git config --global core.autocrlf input`) to prevent issues with the Nginx configuration files.
+
+---
+
 ## 🛠 Features
 
 - **Master Roster:** Securely store member details, guardian contacts, and notes.
