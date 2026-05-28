@@ -19,6 +19,10 @@
     <!-- QR Decoding Library -->
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <script>
+        window.checkCameraSupport = function() {
+            return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && navigator.mediaDevices.enumerateDevices);
+        };
+
         window.qrHelper = {
             decode: function () {
                 const video = document.querySelector('video');

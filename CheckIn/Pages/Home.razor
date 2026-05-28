@@ -85,7 +85,14 @@
 
 @if (!AuthService.IsLoggedIn || AuthService.IsMember)
 {
-    if (!_cameraSupported)
+    if (_isCheckingCamera)
+    {
+        <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2000; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center;">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+            <MudText Typo="Typo.h5" Style="color: white; margin-top: 20px;">Checking Camera Access...</MudText>
+        </div>
+    }
+    else if (!_cameraSupported)
     {
         <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2000; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center;">
             <MudIcon Icon="@Icons.Material.Filled.VideocamOff" Color="Color.Error" Style="font-size: 6rem; margin-bottom: 20px;" />
@@ -270,7 +277,8 @@
     private bool _isProcessingQrAction = false;
     private bool _isScanning = false;
     private bool _isProcessingManualAction = false;
-    private bool _cameraSupported = true;
+    private bool _cameraSupported = false;
+    private bool _isCheckingCamera = true;
     private System.Timers.Timer? _qrScanTimer;
 
     protected override async Task OnInitializedAsync()
@@ -301,12 +309,15 @@
     {
         try 
         {
-            _cameraSupported = await JSRuntime.InvokeAsync<bool>("eval", "!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)");
-            await InvokeAsync(StateHasChanged);
+            _cameraSupported = await JSRuntime.InvokeAsync<bool>("checkCameraSupport");
         }
         catch 
         {
             _cameraSupported = false;
+        }
+        finally
+        {
+            _isCheckingCamera = false;
             await InvokeAsync(StateHasChanged);
         }
     }
