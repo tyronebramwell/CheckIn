@@ -27,26 +27,43 @@ A privacy-by-design, local network system for managing charity event registratio
 
 ## 🔐 SSL Setup Guide (Mandatory)
 
-Because this system handles sensitive member and medical data, **HTTPS is strictly enforced**. You must generate a local SSL certificate for the Docker containers to run correctly.
+Because this system handles sensitive member and medical data, **HTTPS is strictly enforced**. You must generate and convert a local SSL certificate for the Docker containers to run correctly.
 
-### Step 1: Create the Certificates Directory
-In the root of the project, create a folder to hold your certificate:
+### Step 1: Generate the PFX Certificate
+In the root of the project, create a `certs` folder and generate the .NET development certificate. 
+**Important:** Use the password `Bra09094626!` to match the provided configuration, or update your `.env` accordingly.
+
 ```bash
 mkdir certs
-```
-
-### Step 2: Generate the Certificate
-Run the following command. **Important:** Replace `your_secure_password` with the same password you have set in the `CERT_PASSWORD` field of your `.env` file.
-
-```bash
-dotnet dev-certs https -ep ./certs/aspnetapp.pfx -p your_secure_password
-```
-
-### Step 3: Trust the Development Certificate
-To avoid browser security warnings on your local machine, tell your OS to trust the .NET development certificates:
-```bash
+dotnet dev-certs https -ep ./certs/aspnetapp.pfx -p Bra09094626!
 dotnet dev-certs https --trust
 ```
+
+### Step 2: Convert to CRT/KEY for the UI Container
+The Nginx server used for the website requires standard certificate and key files. Use **OpenSSL** (available in Git Bash on Windows or Terminal on Mac) to extract them:
+
+```bash
+openssl pkcs12 -in ./certs/aspnetapp.pfx -clcerts -nokeys -out ./certs/aspnetapp.crt -passin pass:Bra09094626!
+openssl pkcs12 -in ./certs/aspnetapp.pfx -nocerts -nodes -out ./certs/aspnetapp.key -passin pass:Bra09094626!
+```
+
+---
+
+## 🏁 Windows Build Fixes
+
+If you encounter build errors on Windows, run these commands in PowerShell:
+
+1. **Install Blazor Workload:**
+   ```powershell
+   dotnet workload install blazor-wasm
+   ```
+
+2. **Clean & Rebuild:**
+   ```powershell
+   dotnet clean CheckIn.sln
+   Get-ChildItem -Recurse -Include bin,obj | Remove-Item -Recurse -Force
+   dotnet build CheckIn.sln
+   ```
 
 ---
 

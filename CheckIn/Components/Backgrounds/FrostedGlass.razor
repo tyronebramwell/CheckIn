@@ -1,0 +1,117 @@
+@implements IDisposable
+@inject IJSRuntime JSRuntime
+
+<style>
+    .frosted-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        display: grid;
+        /* 40 columns, 30 rows */
+        grid-template-columns: repeat(40, 1fr);
+        grid-template-rows: repeat(30, 1fr);
+    }
+
+    .frost-cell {
+        width: 100%;
+        height: 100%;
+        backdrop-filter: blur(20px);
+        background-color: rgba(255, 255, 255, 0.5);
+        transition: opacity 0.3s ease-out, backdrop-filter 0.5s ease;
+    }
+</style>
+
+<div class="frosted-container">
+    @for (int i = 0; i < _cells.Length; i++)
+    {
+        <div class="frost-cell" style="opacity: @(_cells[i]); backdrop-filter: blur(@(_cells[i] * 20)px);"></div>
+    }
+</div>
+
+@code {
+    private double[] _cells = new double[1200]; // 40x30 grid
+    private System.Timers.Timer? _updateTimer;
+    private const int Cols = 40;
+    private const int Rows = 30;
+
+    protected override void OnInitialized()
+    {
+        // Start fully frosted
+        for (int i = 0; i < _cells.Length; i++) _cells[i] = 1.0;
+
+        _updateTimer = new System.Timers.Timer(150); 
+        _updateTimer.Elapsed += async (s, e) => await UpdateFrost();
+        _updateTimer.Start();
+    }
+
+    private async Task UpdateFrost()
+    {
+        try
+        {
+            var motionPoints = await JSRuntime.InvokeAsync<List<MotionPoint>>("motionHelper.getMotionMap", 15);
+
+            // 1. Fade back in (refrost)
+            for (int i = 0; i < _cells.Length; i++)
+            {
+                if (_cells[i] < 1.0)
+                {
+                    _cells[i] = Math.Min(1.0, _cells[i] + 0.04); // Slightly slower refrost for high res
+                }
+            }
+
+            // 2. Clear frost based on motion
+            if (motionPoints != null)
+            {
+                foreach (var point in motionPoints)
+                {
+                    double correctedX = 100 - point.X;
+                    
+                    int col = (int)(correctedX / (100.0 / Cols));
+                    int row = (int)(point.Y / (100.0 / Rows));
+
+                    col = Math.Clamp(col, 0, Cols - 1);
+                    row = Math.Clamp(row, 0, Rows - 1);
+
+                    int index = row * Cols + col;
+                    _cells[index] = 0.0; // Wipe clean
+                    
+                    // Clear a larger radius for the higher resolution grid
+                    for (int dr = -1; dr <= 1; dr++)
+                    {
+                        for (int dc = -1; dc <= 1; dc++)
+                        {
+                            ClearNeighbor(col + dc, row + dr, 0.2);
+                        }
+                    }
+                }
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+    private void ClearNeighbor(int c, int r, double amount)
+    {
+        if (c >= 0 && c < Cols && r >= 0 && r < Rows)
+        {
+            int idx = r * Cols + c;
+            _cells[idx] = Math.Min(_cells[idx], amount); // Partial clear
+        }
+    }
+
+    public void Dispose()
+    {
+        _updateTimer?.Stop();
+        _updateTimer?.Dispose();
+    }
+
+    private class MotionPoint {
+        public double X { get; set; }
+        public double Y { get; set; }
+    }
+}
