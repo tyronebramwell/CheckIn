@@ -31,11 +31,11 @@ Because this system handles sensitive member and medical data, **HTTPS is strict
 
 ### Step 1: Generate the PFX Certificate
 In the root of the project, create a `certs` folder and generate the .NET development certificate. 
-**Important:** Use the password `Bra09094626!` to match the provided configuration, or update your `.env` accordingly.
+**Important:** Use the password `MyPassword!` to match the provided configuration, or update your `.env` accordingly.
 
 ```bash
 mkdir certs
-dotnet dev-certs https -ep ./certs/aspnetapp.pfx -p Bra09094626!
+dotnet dev-certs https -ep ./certs/aspnetapp.pfx -p MyPassword!
 dotnet dev-certs https --trust
 ```
 
