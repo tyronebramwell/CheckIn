@@ -21,7 +21,14 @@
         <MudTextField @bind-Value="_username" Label="Username" Variant="Variant.Outlined" Class="mt-6" Immediate="true" Style="font-size: 1.2rem;" />
         <MudTextField @bind-Value="_password" Label="Password" Variant="Variant.Outlined" InputType="InputType.Password" Class="mt-6" Immediate="true" Style="font-size: 1.2rem;" />
         
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mt-10 py-4" OnClick="OnLogin" Size="Size.Large" Style="font-size: 1.2rem; border-radius: 10px;">Login</MudButton>
+        <div class="d-flex justify-end mt-2">
+            <MudLink Typo="Typo.body2" Color="Color.Primary" OnClick="OpenForgotPasswordDialog" Style="cursor: pointer">Forgotten Password?</MudLink>
+        </div>
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mt-10 py-4" OnClick="OnLogin" Size="Size.Large" Style="font-size: 1.2rem; border-radius: 10px;" Disabled="_isLoggingIn">
+            @if (_isLoggingIn) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2"/> }
+            Login
+        </MudButton>
         
         <MudDivider Class="my-8" />
         
@@ -39,6 +46,9 @@
     private CameraStreamer? _cameraStreamer;
     private string _username = "";
     private string _password = "";
+    private bool _isLoggingIn = false;
+
+    [Inject] private IDialogService DialogService { get; set; } = null!;
 
     private async Task OnLogin()
     {
@@ -48,8 +58,23 @@
             return;
         }
 
+        _isLoggingIn = true;
         if (await AuthService.LoginAsync(_username, _password))
         {
+            if (AuthService.MustChangePassword)
+            {
+                var options = new DialogOptions { CloseOnEscapeKey = false, BackdropClick = false };
+                var dialog = await DialogService.ShowAsync<CheckIn.Components.ForcePasswordResetDialog>("Update Your Password", options);
+                var result = await dialog.Result;
+                
+                if (result == null || result.Canceled)
+                {
+                    AuthService.Logout();
+                    _isLoggingIn = false;
+                    return;
+                }
+            }
+
             Snackbar.Add("Login successful", Severity.Success);
             NavigationManager.NavigateTo("/");
         }
@@ -57,5 +82,12 @@
         {
             Snackbar.Add("Login failed. Please check your credentials.", Severity.Error);
         }
+        _isLoggingIn = false;
+    }
+
+    private async Task OpenForgotPasswordDialog()
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = true };
+        await DialogService.ShowAsync<CheckIn.Components.ForgotPasswordDialog>("Forgotten Password", options);
     }
 }

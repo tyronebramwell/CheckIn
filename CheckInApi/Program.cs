@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
@@ -23,8 +24,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddSingleton<CsvService>();
+builder.Services.AddScoped<CsvService>();
 builder.Services.AddScoped<LogService>();
+builder.Services.AddScoped<EmailService>();
+builder.Services.AddHostedService<CsvSyncWorker>();
 
 builder.Services.AddAuthentication("BasicAuthentication")
     .AddScheme<AuthenticationSchemeOptions, BasicAuthenticationHandler>("BasicAuthentication", null);
@@ -34,6 +37,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("CanViewData", policy => policy.RequireClaim("CanViewData", "true"));
     options.AddPolicy("CanAddUsers", policy => policy.RequireClaim("CanAddUsers", "true"));
     options.AddPolicy("CanManageVolunteers", policy => policy.RequireClaim("CanManageVolunteers", "true"));
+    options.AddPolicy("CanManageEvents", policy => policy.RequireClaim("CanManageEvents", "true"));
     options.AddPolicy("IsMember", policy => policy.RequireClaim("UserType", "Member"));
 });
 
@@ -93,12 +97,79 @@ app.UseSwaggerUI(c =>
 
 app.MapGet("/health", () => Results.Ok("API is running")).AllowAnonymous();
 
-app.MapGet("/api/config", (IConfiguration config) => 
+app.MapGet("/api/config", async (AppDbContext db, IConfiguration config) =>
 {
-    var allowPublic = config.GetValue<bool>("ALLOW_PUBLIC_REGISTRATION");
+    var allowPublicEntry = await db.SystemConfigs.FindAsync("ALLOW_PUBLIC_REGISTRATION");
+    bool allowPublic;
+
+    if (allowPublicEntry != null)
+    {
+        allowPublic = bool.Parse(allowPublicEntry.Value);
+    }
+    else
+    {
+        allowPublic = config.GetValue<bool>("ALLOW_PUBLIC_REGISTRATION");
+    }
+
     return Results.Ok(new { allowPublic });
 }).AllowAnonymous();
 
+app.MapPost("/api/config/sync-now", async (CsvService csv, LogService log) =>
+{
+    await csv.ImportFromCsvAsync();
+    await csv.SyncEventsAsync();
+    await csv.SyncMembersAsync();
+    await csv.SyncAttendanceAsync(DateTime.UtcNow);
+    await log.LogAsync("Manual two-way CSV synchronization triggered by administrator");
+    return Results.Ok();
+}).RequireAuthorization("CanManageVolunteers");
+
+app.MapGet("/api/config/admin", async (AppDbContext db, IConfiguration config) =>
+{
+    var settings = await db.SystemConfigs.ToListAsync();
+    
+    // Ensure we return the effective values even if not in DB yet
+    var keys = new[] { "ALLOW_PUBLIC_REGISTRATION", "ORG_NAME", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "CSV_SYNC_INTERVAL_MINS" };
+    foreach (var key in keys)
+    {
+        if (!settings.Any(s => s.Key == key))
+        {
+            settings.Add(new SystemConfig 
+            { 
+                Key = key, 
+                Value = config.GetValue<string>(key) ?? (key == "CSV_SYNC_INTERVAL_MINS" ? "5" : (key == "SMTP_PORT" ? "587" : (key == "SMTP_HOST" ? "smtp.gmail.com" : (key == "ORG_NAME" ? "Charity Check-In" : ""))))
+            });
+        }
+    }
+
+    return Results.Ok(settings);
+}).RequireAuthorization("CanManageVolunteers");
+
+app.MapPut("/api/config", async (AppDbContext db, LogService log, List<SystemConfig> settings) =>
+{
+    foreach (var setting in settings)
+    {
+        var existing = await db.SystemConfigs.FindAsync(setting.Key);
+        if (existing != null)
+        {
+            existing.Value = setting.Value;
+            existing.UpdatedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            db.SystemConfigs.Add(new SystemConfig
+            {
+                Key = setting.Key,
+                Value = setting.Value,
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
+    }
+
+    await db.SaveChangesAsync();
+    await log.LogAsync("System configuration updated by administrator");
+    return Results.NoContent();
+}).RequireAuthorization("CanManageVolunteers");
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -115,10 +186,52 @@ app.MapPost("/api/auth/login", async (ClaimsPrincipal user, LogService log) =>
     var canViewData = user.FindFirstValue("CanViewData") == "true";
     var canAddUsers = user.FindFirstValue("CanAddUsers") == "true";
     var canManageVolunteers = user.FindFirstValue("CanManageVolunteers") == "true";
+    var mustChangePassword = user.FindFirstValue("MustChangePassword") == "true";
 
     await log.LogAsync($"Login successful as {userType}");
 
-    return Results.Ok(new { userType, canViewData, canAddUsers, canManageVolunteers });
+    return Results.Ok(new { userType, canViewData, canAddUsers, canManageVolunteers, mustChangePassword });
+}).RequireAuthorization();
+
+app.MapPost("/api/auth/forgot-password", async (AppDbContext db, EmailService emailService, LogService log, ForgotPasswordRequest request) =>
+{
+    var member = await db.Members.SingleOrDefaultAsync(m => m.UserEmail.ToLower() == request.Email.ToLower());
+    if (member == null)
+    {
+        // Don't reveal if email exists, but log it
+        await log.LogAsync($"Forgot password attempt for unknown email: {request.Email}", true);
+        return Results.Ok(); 
+    }
+
+    // Generate random 6 character password
+    const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No ambiguous chars
+    var random = new Random();
+    var tempPassword = new string(Enumerable.Repeat(chars, 6).Select(s => s[random.Next(s.Length)]).ToArray());
+
+    member.PasswordHash = BCrypt.Net.BCrypt.HashPassword(tempPassword);
+    member.MustChangePassword = true;
+    await db.SaveChangesAsync();
+
+    _ = emailService.SendTemporaryPasswordEmailAsync(member.UserEmail, member.Username, tempPassword);
+    
+    await log.LogAsync($"Temporary password sent to {member.Username}");
+    return Results.Ok();
+}).AllowAnonymous();
+
+app.MapPost("/api/auth/change-password-reset", async (AppDbContext db, LogService log, ClaimsPrincipal user, ChangePasswordResetRequest request) =>
+{
+    var memberIdStr = user.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrEmpty(memberIdStr)) return Results.Unauthorized();
+    
+    var member = await db.Members.FindAsync(Guid.Parse(memberIdStr));
+    if (member == null) return Results.NotFound();
+
+    member.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+    member.MustChangePassword = false;
+    await db.SaveChangesAsync();
+
+    await log.LogAsync($"Password reset completed for {member.Username}");
+    return Results.NoContent();
 }).RequireAuthorization();
 
 app.MapPost("/api/auth/qr-login", async (AppDbContext db, LogService log, QrLoginRequest request) =>
@@ -141,7 +254,7 @@ app.MapPost("/api/auth/qr-login", async (AppDbContext db, LogService log, QrLogi
 }).AllowAnonymous();
 
 // Registration Endpoints
-app.MapPost("/api/members/public", async (AppDbContext db, CsvService csv, LogService log, IConfiguration config, MemberRegistrationDto dto) =>
+app.MapPost("/api/members/public", async (AppDbContext db, CsvService csv, LogService log, EmailService emailService, IConfiguration config, MemberRegistrationDto dto) =>
 {
     var allowPublic = config.GetValue<bool>("ALLOW_PUBLIC_REGISTRATION");
     if (!allowPublic) return Results.Forbid();
@@ -156,13 +269,14 @@ app.MapPost("/api/members/public", async (AppDbContext db, CsvService csv, LogSe
     {
         FirstName = dto.FirstName,
         LastName = dto.LastName,
-        DateOfBirth = DateTime.SpecifyKind(dto.DateOfBirth, DateTimeKind.Utc),
+        DateOfBirth = dto.DateOfBirth,
         Guardian1Name = dto.Guardian1Name,
         Guardian1Phone = dto.Guardian1Phone,
         Guardian2Name = dto.Guardian2Name,
         Guardian2Phone = dto.Guardian2Phone,
         UserEmail = dto.UserEmail,
         Notes = dto.Notes,
+        AllowEmail = dto.AllowEmail,
         Username = dto.Username,
         PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
         QrSecret = Guid.NewGuid()
@@ -189,14 +303,19 @@ app.MapPost("/api/members/public", async (AppDbContext db, CsvService csv, LogSe
 
     db.Members.Add(member);
     await db.SaveChangesAsync();
-    _ = csv.SyncMembersAsync();
+    
+    if (member.AllowEmail)
+    {
+        var qrText = $"{member.Username}|{member.QrSecret}";
+        _ = emailService.SendQrCodeEmailAsync(member.UserEmail, member.Username, qrText);
+    }
     
     await log.LogAsync($"Public registration successful: {member.Username} ({member.MemberId})");
     
     return Results.Created($"/api/members/{member.MemberId}", member);
 }).AllowAnonymous();
 
-app.MapPost("/api/members", async (AppDbContext db, CsvService csv, LogService log, MemberRegistrationDto dto) =>
+app.MapPost("/api/members", async (AppDbContext db, CsvService csv, LogService log, EmailService emailService, MemberRegistrationDto dto) =>
 {
     if (await db.Members.AnyAsync(m => m.Username.ToLower() == dto.Username.ToLower()))
     {
@@ -208,13 +327,14 @@ app.MapPost("/api/members", async (AppDbContext db, CsvService csv, LogService l
     {
         FirstName = dto.FirstName,
         LastName = dto.LastName,
-        DateOfBirth = DateTime.SpecifyKind(dto.DateOfBirth, DateTimeKind.Utc),
+        DateOfBirth = dto.DateOfBirth,
         Guardian1Name = dto.Guardian1Name,
         Guardian1Phone = dto.Guardian1Phone,
         Guardian2Name = dto.Guardian2Name,
         Guardian2Phone = dto.Guardian2Phone,
         UserEmail = dto.UserEmail,
         Notes = dto.Notes,
+        AllowEmail = dto.AllowEmail,
         Username = dto.Username,
         PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
         QrSecret = Guid.NewGuid()
@@ -241,7 +361,12 @@ app.MapPost("/api/members", async (AppDbContext db, CsvService csv, LogService l
 
     db.Members.Add(member);
     await db.SaveChangesAsync();
-    _ = csv.SyncMembersAsync(); // Background sync
+    
+    if (member.AllowEmail)
+    {
+        var qrText = $"{member.Username}|{member.QrSecret}";
+        _ = emailService.SendQrCodeEmailAsync(member.UserEmail, member.Username, qrText);
+    }
     
     await log.LogAsync($"Registered new member: {member.Username} ({member.MemberId})");
 
@@ -279,6 +404,7 @@ app.MapGet("/api/members/{id}", async (AppDbContext db, LogService log, Guid id)
         member.Guardian2Phone,
         member.UserEmail,
         member.Notes,
+        member.AllowEmail,
         member.Username,
         member.QrSecret,
         AcceptsNewsletter = preference?.AcceptsNewsletter ?? false,
@@ -297,7 +423,7 @@ app.MapGet("/api/members/export", async (AppDbContext db) =>
 
     foreach (var m in members)
     {
-        csv.AppendLine($"{m.MemberId},{m.Username},{m.FirstName},{m.LastName},{m.DateOfBirth:yyyy-MM-dd},\"{m.Guardian1Name}\",\"{m.Guardian1Phone}\",\"{m.Guardian2Name}\",\"{m.Guardian2Phone}\",{m.UserEmail},\"{m.Notes?.Replace("\"", "'")}\"");
+        csv.AppendLine($"{m.MemberId},{m.Username},{m.FirstName},{m.LastName},{m.DateOfBirth:yyyy-MM-dd},\"{m.Guardian1Name}\",\"=\"\"{m.Guardian1Phone}\"\"\",\"\"{m.Guardian2Name}\"\",\"=\"\"{m.Guardian2Phone}\"\"\",{m.UserEmail},\"{m.Notes?.Replace("\"", "'")}\"");
     }
 
     var directory = Path.Combine(Directory.GetCurrentDirectory(), "drive");
@@ -318,17 +444,19 @@ app.MapGet("/api/attendance/export", async (AppDbContext db, DateTime? date) =>
 
     var logs = await db.AttendanceLogs
         .Include(l => l.Member)
+        .Include(l => l.Event)
         .Where(l => l.CheckInTime >= targetDate && l.CheckInTime < nextDay)
         .OrderBy(l => l.CheckInTime)
         .ToListAsync();
     
     var csv = new System.Text.StringBuilder();
-    csv.AppendLine("LogId,MemberId,Username,FirstName,LastName,CheckInTime,CheckOutTime,Guardian1Name,Guardian1Phone,Guardian2Name,Guardian2Phone,Notes");
+    csv.AppendLine("LogId,MemberId,Username,FirstName,LastName,Event,CheckInTime,CheckOutTime,Guardian1Name,Guardian1Phone,Guardian2Name,Guardian2Phone,Notes");
 
     foreach (var l in logs)
     {
         var m = l.Member!;
-        csv.AppendLine($"{l.LogId},{l.MemberId},{m.Username},{m.FirstName},{m.LastName},{l.CheckInTime:yyyy-MM-dd HH:mm:ss},{l.CheckOutTime:yyyy-MM-dd HH:mm:ss},\"{m.Guardian1Name}\",\"{m.Guardian1Phone}\",\"{m.Guardian2Name}\",\"{m.Guardian2Phone}\",\"{m.Notes?.Replace("\"", "'")}\"");
+        var evName = l.Event != null ? l.Event.Name : "General";
+        csv.AppendLine($"{l.LogId},{l.MemberId},{m.Username},{m.FirstName},{m.LastName},{evName},{l.CheckInTime:yyyy-MM-dd HH:mm:ss},{l.CheckOutTime:yyyy-MM-dd HH:mm:ss},\"{m.Guardian1Name}\",\"=\"\"{m.Guardian1Phone}\"\"\",\"\"{m.Guardian2Name}\"\",\"=\"\"{m.Guardian2Phone}\"\"\",\"{m.Notes?.Replace("\"", "'")}\"");
     }
 
     var directory = Path.Combine(Directory.GetCurrentDirectory(), "drive");
@@ -353,16 +481,23 @@ app.MapPut("/api/members/{id}", async (AppDbContext db, CsvService csv, LogServi
         return Results.BadRequest("Username already exists.");
     }
 
+    if (await db.Members.AnyAsync(m => m.MemberId != id && m.UserEmail.ToLower() == dto.UserEmail.ToLower()))
+    {
+        await log.LogAsync($"Failed profile update for {member.Username}: Email {dto.UserEmail} already exists", true);
+        return Results.BadRequest("Email already exists.");
+    }
+
     // Update member details
     member.FirstName = dto.FirstName;
     member.LastName = dto.LastName;
-    member.DateOfBirth = DateTime.SpecifyKind(dto.DateOfBirth, DateTimeKind.Utc);
+    member.DateOfBirth = dto.DateOfBirth;
     member.Guardian1Name = dto.Guardian1Name;
     member.Guardian1Phone = dto.Guardian1Phone;
     member.Guardian2Name = dto.Guardian2Name;
     member.Guardian2Phone = dto.Guardian2Phone;
     member.UserEmail = dto.UserEmail;
     member.Notes = dto.Notes;
+    member.AllowEmail = dto.AllowEmail;
     member.Username = dto.Username;
     
     if (!string.IsNullOrEmpty(dto.Password) && dto.Password != "********")
@@ -391,11 +526,20 @@ app.MapPut("/api/members/{id}", async (AppDbContext db, CsvService csv, LogServi
     }
 
     await db.SaveChangesAsync();
-    _ = csv.SyncMembersAsync(); // Background sync
     
     await log.LogAsync($"Updated member profile: {member.Username} ({member.MemberId})");
 
     return Results.NoContent();
+}).RequireAuthorization("CanAddUsers");
+
+app.MapPost("/api/members/{id}/send-qr-email", async (AppDbContext db, EmailService emailService, Guid id) =>
+{
+    var member = await db.Members.FindAsync(id);
+    if (member == null) return Results.NotFound();
+
+    var qrText = $"{member.Username}|{member.QrSecret}";
+    var success = await emailService.SendQrCodeEmailAsync(member.UserEmail, member.Username, qrText);
+    return success ? Results.Ok() : Results.BadRequest("Failed to send email. Check SMTP settings.");
 }).RequireAuthorization("CanAddUsers");
 
 app.MapPost("/api/members/{id}/regenerate-qr", async (AppDbContext db, LogService log, Guid id) =>
@@ -410,6 +554,59 @@ app.MapPost("/api/members/{id}/regenerate-qr", async (AppDbContext db, LogServic
 
     return Results.Ok(new { qrSecret = member.QrSecret });
 }).RequireAuthorization("CanAddUsers");
+
+// Event Endpoints
+app.MapGet("/api/events", async (AppDbContext db) =>
+{
+    return await db.Events.OrderByDescending(e => e.EventDate).ToListAsync();
+}).RequireAuthorization("CanViewData");
+
+app.MapGet("/api/events/today", async (AppDbContext db) =>
+{
+    var today = DateOnly.FromDateTime(DateTime.UtcNow);
+    return await db.Events.Where(e => e.EventDate == today).ToListAsync();
+}).AllowAnonymous();
+
+app.MapPost("/api/events", async (AppDbContext db, LogService log, CreateEventDto dto) =>
+{
+    var eventsToCreate = new List<Event>();
+    var currentDate = dto.EventDate;
+
+    // First instance
+    eventsToCreate.Add(new Event { Name = dto.Name, EventDate = currentDate });
+
+    if (dto.RepeatCount > 0 && dto.RepeatType != "None")
+    {
+        for (int i = 0; i < dto.RepeatCount; i++)
+        {
+            currentDate = dto.RepeatType switch
+            {
+                "Weekly" => currentDate.AddDays(7),
+                "Bi-Weekly" => currentDate.AddDays(14),
+                "Monthly" => currentDate.AddMonths(1),
+                _ => currentDate
+            };
+            eventsToCreate.Add(new Event { Name = dto.Name, EventDate = currentDate });
+        }
+    }
+
+    db.Events.AddRange(eventsToCreate);
+    await db.SaveChangesAsync();
+    
+    await log.LogAsync($"Created {eventsToCreate.Count} events: {dto.Name} starting {dto.EventDate:yyyy-MM-dd}");
+    return Results.Ok(eventsToCreate);
+}).RequireAuthorization("CanManageEvents");
+
+app.MapDelete("/api/events/{id}", async (AppDbContext db, LogService log, Guid id) =>
+{
+    var ev = await db.Events.FindAsync(id);
+    if (ev == null) return Results.NotFound();
+    
+    db.Events.Remove(ev);
+    await db.SaveChangesAsync();
+    await log.LogAsync($"Deleted event: {ev.Name}");
+    return Results.NoContent();
+}).RequireAuthorization("CanManageEvents");
 
 app.MapPut("/api/members/self/password", async (AppDbContext db, LogService log, UpdatePasswordDto dto, ClaimsPrincipal user) =>
 {
@@ -441,7 +638,6 @@ app.MapPost("/api/attendance/check-in", async (AppDbContext db, CsvService csv, 
     };
     db.AttendanceLogs.Add(attendanceLog);
     await db.SaveChangesAsync();
-    _ = csv.SyncAttendanceAsync(DateTime.UtcNow);
     
     await log.LogAsync(logMsg);
     
@@ -455,27 +651,45 @@ app.MapPut("/api/attendance/check-out", async (AppDbContext db, CsvService csv, 
     
     attendanceLog.CheckOutTime = DateTime.UtcNow;
     await db.SaveChangesAsync();
-    _ = csv.SyncAttendanceAsync(attendanceLog.CheckInTime);
     
     await log.LogAsync($"Volunteer checked out member: {attendanceLog.Member?.Username}");
 
     return Results.Ok(attendanceLog);
 }).RequireAuthorization("CanViewData");
 
-app.MapPost("/api/attendance/self-check-in", async (AppDbContext db, CsvService csv, LogService log, ClaimsPrincipal user) =>
+app.MapPost("/api/attendance/self-check-in", async (AppDbContext db, CsvService csv, LogService log, ClaimsPrincipal user, [FromQuery] Guid? eventId) =>
 {
     var memberIdStr = user.FindFirstValue(ClaimTypes.NameIdentifier);
     if (string.IsNullOrEmpty(memberIdStr)) return Results.Unauthorized();
     var memberId = Guid.Parse(memberIdStr);
 
+    var activeLog = await db.AttendanceLogs.Include(l => l.Event).FirstOrDefaultAsync(l => l.MemberId == memberId && l.CheckOutTime == null);
+    if (activeLog != null)
+    {
+        // Auto check-out of previous event
+        activeLog.CheckOutTime = DateTime.UtcNow;
+        await log.LogAsync($"Auto Check-Out from {activeLog.Event?.Name ?? "previous event"} during new check-in");
+    }
+
+    if (eventId == null)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var todayEvents = await db.Events.Where(e => e.EventDate == today).ToListAsync();
+        if (todayEvents.Count > 1)
+        {
+            return Results.Conflict(new { message = "Multiple events active", events = todayEvents });
+        }
+        eventId = todayEvents.FirstOrDefault()?.EventId;
+    }
+
     var attendanceLog = new AttendanceLog
     {
         MemberId = memberId,
+        EventId = eventId,
         CheckInTime = DateTime.UtcNow
     };
     db.AttendanceLogs.Add(attendanceLog);
     await db.SaveChangesAsync();
-    _ = csv.SyncAttendanceAsync(DateTime.UtcNow);
     
     await log.LogAsync("Member self-checked in");
 
@@ -501,14 +715,13 @@ app.MapPost("/api/attendance/self-check-out", async (AppDbContext db, CsvService
     
     attendanceLog.CheckOutTime = DateTime.UtcNow;
     await db.SaveChangesAsync();
-    _ = csv.SyncAttendanceAsync(attendanceLog.CheckInTime);
     
     await log.LogAsync("Member self-checked out");
 
     return Results.Ok(attendanceLog);
 }).RequireAuthorization("IsMember");
 
-app.MapPost("/api/attendance/qr-action", async (AppDbContext db, CsvService csv, LogService log, QrLoginRequest request) =>
+app.MapPost("/api/attendance/qr-action", async (AppDbContext db, CsvService csv, LogService log, QrLoginRequest request, [FromQuery] Guid? eventId) =>
 {
     var member = await db.Members.SingleOrDefaultAsync(m => m.Username.ToLower() == request.Username.ToLower() && m.QrSecret == request.QrSecret);
     
@@ -519,6 +732,7 @@ app.MapPost("/api/attendance/qr-action", async (AppDbContext db, CsvService csv,
     }
 
     var activeLog = await db.AttendanceLogs
+        .Include(l => l.Event)
         .Where(l => l.MemberId == member.MemberId && l.CheckOutTime == null)
         .OrderByDescending(l => l.CheckInTime)
         .FirstOrDefaultAsync();
@@ -527,9 +741,21 @@ app.MapPost("/api/attendance/qr-action", async (AppDbContext db, CsvService csv,
     if (activeLog == null)
     {
         // Perform Check-In
+        if (eventId == null)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var todayEvents = await db.Events.Where(e => e.EventDate == today).ToListAsync();
+            if (todayEvents.Count > 1)
+            {
+                return Results.Conflict(new { action = "RequiresSelection", events = todayEvents });
+            }
+            eventId = todayEvents.FirstOrDefault()?.EventId;
+        }
+
         var logEntry = new AttendanceLog
         {
             MemberId = member.MemberId,
+            EventId = eventId,
             CheckInTime = DateTime.UtcNow
         };
         db.AttendanceLogs.Add(logEntry);
@@ -541,11 +767,10 @@ app.MapPost("/api/attendance/qr-action", async (AppDbContext db, CsvService csv,
         // Perform Check-Out
         activeLog.CheckOutTime = DateTime.UtcNow;
         action = "CheckedOut";
-        await log.LogAsync($"QR Direct Check-Out: {member.Username}");
+        await log.LogAsync($"QR Direct Check-Out: {member.Username} (from {activeLog.Event?.Name ?? "event"})");
     }
 
     await db.SaveChangesAsync();
-    _ = csv.SyncAttendanceAsync(DateTime.UtcNow);
 
     return Results.Ok(new { action, username = member.Username, firstName = member.FirstName, lastName = member.LastName });
 }).AllowAnonymous();
@@ -566,17 +791,19 @@ app.MapGet("/api/attendance/active", async (AppDbContext db) =>
 {
     var activeAttendance = await db.AttendanceLogs
         .Include(l => l.Member)
+        .Include(l => l.Event)
         .Where(l => l.CheckOutTime == null)
         .Select(l => new
         {
+            l.LogId,
             l.MemberId,
             l.Member!.FirstName,
             l.Member!.LastName,
             l.Member!.Notes,
             l.Member!.Guardian1Phone,
             l.Member!.Guardian2Phone,
-            l.CheckInTime
-
+            l.CheckInTime,
+            EventName = l.Event != null ? l.Event.Name : "General"
         })
         .ToListAsync();
     return Results.Ok(activeAttendance);
@@ -589,6 +816,7 @@ app.MapGet("/api/attendance/history", async (AppDbContext db, DateTime? date) =>
 
     var history = await db.AttendanceLogs
         .Include(l => l.Member)
+        .Include(l => l.Event)
         .Where(l => l.CheckInTime >= targetDate && l.CheckInTime < nextDay)
         .OrderByDescending(l => l.CheckInTime)
         .Select(l => new
@@ -599,7 +827,8 @@ app.MapGet("/api/attendance/history", async (AppDbContext db, DateTime? date) =>
             l.Member!.LastName,
             l.CheckInTime,
             l.CheckOutTime,
-            l.Member!.Guardian1Phone
+            l.Member!.Guardian1Phone,
+            EventName = l.Event != null ? l.Event.Name : "General"
         })
         .ToListAsync();
     return Results.Ok(history);
@@ -617,7 +846,7 @@ app.MapGet("/api/logs", async (AppDbContext db) =>
 // Volunteer Management Endpoints
 app.MapGet("/api/volunteers", async (AppDbContext db) =>
 {
-    return Results.Ok(await db.Volunteers.Select(v => new { v.VolunteerId, v.Username, v.CanViewData, v.CanAddUsers, v.CanManageVolunteers }).ToListAsync());
+    return Results.Ok(await db.Volunteers.Select(v => new { v.VolunteerId, v.Username, v.Email, v.CanViewData, v.CanAddUsers, v.CanManageVolunteers, v.CanManageEvents }).ToListAsync());
 }).RequireAuthorization("CanManageVolunteers");
 
 app.MapPost("/api/volunteers", async (AppDbContext db, CreateVolunteerDto dto) =>
@@ -628,10 +857,12 @@ app.MapPost("/api/volunteers", async (AppDbContext db, CreateVolunteerDto dto) =
     var volunteer = new Volunteer
     {
         Username = dto.Username,
+        Email = dto.Email,
         PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
         CanViewData = dto.CanViewData,
         CanAddUsers = dto.CanAddUsers,
-        CanManageVolunteers = dto.CanManageVolunteers
+        CanManageVolunteers = dto.CanManageVolunteers,
+        CanManageEvents = dto.CanManageEvents
     };
     db.Volunteers.Add(volunteer);
     await db.SaveChangesAsync();
@@ -659,9 +890,11 @@ app.MapPut("/api/volunteers/{id}/permissions", async (AppDbContext db, Guid id, 
     var volunteer = await db.Volunteers.FindAsync(id);
     if (volunteer == null) return Results.NotFound();
 
+    volunteer.Email = dto.Email;
     volunteer.CanViewData = dto.CanViewData;
     volunteer.CanAddUsers = dto.CanAddUsers;
     volunteer.CanManageVolunteers = dto.CanManageVolunteers;
+    volunteer.CanManageEvents = dto.CanManageEvents;
     await db.SaveChangesAsync();
     return Results.NoContent();
 }).RequireAuthorization("CanManageVolunteers");
@@ -705,8 +938,12 @@ app.Run();
 public record CheckInRequest(Guid MemberId);
 public record CheckOutRequest(Guid LogId);
 
-public record CreateVolunteerDto(string Username, string Password, bool CanViewData, bool CanAddUsers, bool CanManageVolunteers);
+public record CreateVolunteerDto(string Username, string Email, string Password, bool CanViewData, bool CanAddUsers, bool CanManageVolunteers, bool CanManageEvents);
 public record UpdatePasswordDto(string NewPassword);
-public record UpdatePermissionsDto(bool CanViewData, bool CanAddUsers, bool CanManageVolunteers);
+public record UpdatePermissionsDto(string Email, bool CanViewData, bool CanAddUsers, bool CanManageVolunteers, bool CanManageEvents);
 
 public record QrLoginRequest(string Username, Guid QrSecret);
+
+public record ForgotPasswordRequest(string Email);
+public record ChangePasswordResetRequest(string NewPassword);
+public record CreateEventDto(string Name, DateOnly EventDate, string RepeatType, int RepeatCount);

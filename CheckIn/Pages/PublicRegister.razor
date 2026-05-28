@@ -74,6 +74,9 @@
                     <MudItem xs="12">
                         <MudTextField T="string" Label="Notes" Lines="3" @bind-Value="_newMember.Notes" Variant="Variant.Outlined" />
                     </MudItem>
+                    <MudItem xs="12">
+                        <MudCheckBox T="bool" Label="Email my Login QR Code to me" @bind-Value="_newMember.AllowEmail" Color="Color.Primary" />
+                    </MudItem>
                 </MudGrid>
 
                 <div class="mt-8 d-flex justify-center">
@@ -103,7 +106,7 @@
         if (!_form.IsValid) return;
 
         _isProcessing = true;
-        _newMember.DateOfBirth = _dob ?? DateTime.Today;
+        _newMember.DateOfBirth = DateOnly.FromDateTime(_dob ?? DateTime.Today);
         
         var response = await HttpClient.PostAsJsonAsync("/api/members/public", _newMember);
 

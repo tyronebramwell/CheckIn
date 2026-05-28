@@ -2,12 +2,17 @@
 @inject ISnackbar Snackbar
 
 <MudDialog>
-    <TitleContent>Edit Permissions</TitleContent>
+    <TitleContent>Edit Volunteer</TitleContent>
     <DialogContent>
-        <MudText Typo="Typo.h6">@Volunteer.Username</MudText>
-        <MudCheckBox @bind-Value="_canViewData" Label="Can View Data" />
-        <MudCheckBox @bind-Value="_canAddUsers" Label="Can Add Users" />
-        <MudCheckBox @bind-Value="_canManageVolunteers" Label="Can Manage Volunteers" />
+        <MudText Typo="Typo.h6" Class="mb-4">@Volunteer.Username</MudText>
+        
+        <MudTextField @bind-Value="_email" Label="Email Address" Variant="Variant.Outlined" InputType="InputType.Email" Class="mb-6" />
+        
+        <MudText Typo="Typo.subtitle2">Permissions</MudText>
+        <MudCheckBox @bind-Value="_canViewData" Label="Can View Data" Color="Color.Primary" />
+        <MudCheckBox @bind-Value="_canAddUsers" Label="Can Add Members" Color="Color.Primary" />
+        <MudCheckBox @bind-Value="_canManageEvents" Label="Can Manage Events" Color="Color.Primary" />
+        <MudCheckBox @bind-Value="_canManageVolunteers" Label="Can Manage Volunteers (Admin)" Color="Color.Primary" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
@@ -17,16 +22,20 @@
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
-    [Parameter] public CheckIn.Pages.Admin.VolunteerSummary Volunteer { get; set; } = null!;
+    [Parameter] public CheckIn.Pages.VolunteerManagement.VolunteerSummary Volunteer { get; set; } = null!;
 
+    private string? _email;
     private bool _canViewData;
     private bool _canAddUsers;
+    private bool _canManageEvents;
     private bool _canManageVolunteers;
 
     protected override void OnInitialized()
     {
+        _email = Volunteer.Email;
         _canViewData = Volunteer.CanViewData;
         _canAddUsers = Volunteer.CanAddUsers;
+        _canManageEvents = Volunteer.CanManageEvents;
         _canManageVolunteers = Volunteer.CanManageVolunteers;
     }
 
@@ -34,16 +43,23 @@
 
     private async Task Submit()
     {
-        var dto = new { CanViewData = _canViewData, CanAddUsers = _canAddUsers, CanManageVolunteers = _canManageVolunteers };
+        var dto = new { 
+            Email = _email,
+            CanViewData = _canViewData, 
+            CanAddUsers = _canAddUsers, 
+            CanManageEvents = _canManageEvents,
+            CanManageVolunteers = _canManageVolunteers 
+        };
+        
         var response = await HttpClient.PutAsJsonAsync($"/api/volunteers/{Volunteer.VolunteerId}/permissions", dto);
         if (response.IsSuccessStatusCode)
         {
-            Snackbar.Add("Permissions updated", Severity.Success);
+            Snackbar.Add("Volunteer updated", Severity.Success);
             MudDialog.Close(DialogResult.Ok(true));
         }
         else
         {
-            Snackbar.Add("Failed to update permissions", Severity.Error);
+            Snackbar.Add("Failed to update volunteer", Severity.Error);
         }
     }
 }

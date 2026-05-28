@@ -1,11 +1,11 @@
-@page "/admin"
+@page "/volunteers"
 @using CheckInCommon.Models
 @inject HttpClient HttpClient
 @inject AuthService AuthService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 
-<PageTitle>Admin - Volunteer Management</PageTitle>
+<PageTitle>Volunteer Management</PageTitle>
 
 <MudText Typo="Typo.h4" GutterBottom="true">Volunteer Management</MudText>
 
@@ -20,8 +20,10 @@ else
     <MudDataGrid Items="@_volunteers" T="VolunteerSummary" Hover="true">
         <Columns>
             <PropertyColumn Property="x => x.Username" Title="Username" />
+            <PropertyColumn Property="x => x.Email" Title="Email" />
             <PropertyColumn Property="x => x.CanViewData" Title="View Data" />
             <PropertyColumn Property="x => x.CanAddUsers" Title="Add Users" />
+            <PropertyColumn Property="x => x.CanManageEvents" Title="Manage Events" />
             <PropertyColumn Property="x => x.CanManageVolunteers" Title="Manage Admin" />
             <TemplateColumn>
                 <CellTemplate>
@@ -103,5 +105,5 @@ else
         }
     }
 
-    public record VolunteerSummary(Guid VolunteerId, string Username, bool CanViewData, bool CanAddUsers, bool CanManageVolunteers);
+    public record VolunteerSummary(Guid VolunteerId, string Username, string? Email, bool CanViewData, bool CanAddUsers, bool CanManageVolunteers, bool CanManageEvents);
 }

@@ -22,62 +22,100 @@ public class AuthService
     public bool CanViewData { get; private set; }
     public bool CanAddUsers { get; private set; }
     public bool CanManageVolunteers { get; private set; }
+    public bool CanManageEvents { get; private set; }
+    public bool MustChangePassword { get; private set; }
 
     public event Action? OnAuthStateChanged;
 
     public async Task<bool> LoginAsync(string username, string password)
     {
-        var authValue = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
-        var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authValue);
-
-        var response = await _httpClient.SendAsync(request);
-
-        if (response.IsSuccessStatusCode)
+        try
         {
-            var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
-            if (result != null)
+            var authValue = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
+            var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authValue);
+
+            var response = await _httpClient.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
             {
-                _authHeaderValue = authValue;
-                Username = username;
-                UserType = result.UserType;
-                CanViewData = result.CanViewData;
-                CanAddUsers = result.CanAddUsers;
-                CanManageVolunteers = result.CanManageVolunteers;
-                
-                // Set default auth header for all subsequent requests
-                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", _authHeaderValue);
-                OnAuthStateChanged?.Invoke();
-                return true;
+                var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
+                if (result != null)
+                {
+                    _authHeaderValue = authValue;
+                    Username = username;
+                    UserType = result.UserType;
+                    CanViewData = result.CanViewData;
+                    CanAddUsers = result.CanAddUsers;
+                    CanManageVolunteers = result.CanManageVolunteers;
+                    CanManageEvents = result.CanManageEvents;
+                    MustChangePassword = result.MustChangePassword;
+                    
+                    _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", _authHeaderValue);
+                    OnAuthStateChanged?.Invoke();
+                    return true;
+                }
             }
+        }
+        catch (Exception)
+        {
+            // Usually 'Failed to fetch' due to untrusted SSL cert on port 5001
+            return false;
         }
 
         return false;
     }
 
-    public async Task<bool> QrLoginAsync(string username, Guid qrSecret)
+    public async Task<bool> ForgotPasswordAsync(string email)
     {
-        var response = await _httpClient.PostAsJsonAsync("/api/auth/qr-login", new { username, qrSecret });
-
-        if (response.IsSuccessStatusCode)
+        try
         {
-            var result = await response.Content.ReadFromJsonAsync<QrLoginResponse>();
-            if (result != null)
+            var response = await _httpClient.PostAsJsonAsync("/api/auth/forgot-password", new { email });
+            return response.IsSuccessStatusCode;
+        }
+        catch { return false; }
+    }
+
+    public async Task<bool> ChangePasswordResetAsync(string newPassword)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("/api/auth/change-password-reset", new { newPassword });
+            if (response.IsSuccessStatusCode)
             {
-                // Note: For Basic Auth, we don't have a password here.
-                // We could use a "QR-Token" approach, but for this local app, 
-                // we'll simulate the login state.
-                Username = result.Username;
-                UserType = result.UserType;
-                
-                // For simplicity in this demo, we'll use a dummy header to mark as logged in
-                _authHeaderValue = "QR_AUTH";
-                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("QR", result.MemberId.ToString());
-                
+                MustChangePassword = false;
                 OnAuthStateChanged?.Invoke();
                 return true;
             }
         }
+        catch { }
+        return false;
+    }
+
+    public async Task<bool> QrLoginAsync(string username, Guid qrSecret)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("/api/auth/qr-login", new { username, qrSecret });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<QrLoginResponse>();
+                if (result != null)
+                {
+                    Username = result.Username;
+                    UserType = result.UserType;
+                    MustChangePassword = false;
+                    
+                    _authHeaderValue = "QR_AUTH";
+                    _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("QR", result.MemberId.ToString());
+                    
+                    OnAuthStateChanged?.Invoke();
+                    return true;
+                }
+            }
+        }
+        catch { }
 
         return false;
     }
@@ -90,10 +128,12 @@ public class AuthService
         CanViewData = false;
         CanAddUsers = false;
         CanManageVolunteers = false;
+        CanManageEvents = false;
+        MustChangePassword = false;
         _httpClient.DefaultRequestHeaders.Authorization = null;
         OnAuthStateChanged?.Invoke();
     }
 
-    private record LoginResponse(string UserType, bool CanViewData, bool CanAddUsers, bool CanManageVolunteers);
+    private record LoginResponse(string UserType, bool CanViewData, bool CanAddUsers, bool CanManageVolunteers, bool CanManageEvents, bool MustChangePassword);
     private record QrLoginResponse(string UserType, string Username, Guid MemberId);
 }

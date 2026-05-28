@@ -27,7 +27,7 @@ public class BasicAuthenticationHandler : AuthenticationHandler<AuthenticationSc
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         if (!Request.Headers.ContainsKey("Authorization"))
-            return AuthenticateResult.Fail("Missing Authorization Header");
+            return AuthenticateResult.NoResult();
 
         try
         {
@@ -67,7 +67,8 @@ public class BasicAuthenticationHandler : AuthenticationHandler<AuthenticationSc
                     new Claim("UserType", "Volunteer"),
                     new Claim("CanViewData", volunteer.CanViewData.ToString().ToLower()),
                     new Claim("CanAddUsers", volunteer.CanAddUsers.ToString().ToLower()),
-                    new Claim("CanManageVolunteers", volunteer.CanManageVolunteers.ToString().ToLower())
+                    new Claim("CanManageVolunteers", volunteer.CanManageVolunteers.ToString().ToLower()),
+                    new Claim("CanManageEvents", volunteer.CanManageEvents.ToString().ToLower())
                 };
 
                 return Success(claims);
@@ -81,7 +82,8 @@ public class BasicAuthenticationHandler : AuthenticationHandler<AuthenticationSc
                 {
                     new Claim(ClaimTypes.NameIdentifier, memberCheck.MemberId.ToString()),
                     new Claim(ClaimTypes.Name, memberCheck.Username!),
-                    new Claim("UserType", "Member")
+                    new Claim("UserType", "Member"),
+                    new Claim("MustChangePassword", memberCheck.MustChangePassword.ToString().ToLower())
                 };
 
                 return Success(claims);

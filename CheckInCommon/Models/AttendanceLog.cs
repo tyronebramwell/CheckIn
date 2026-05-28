@@ -13,6 +13,11 @@ public class AttendanceLog
     
     [ForeignKey("MemberId")]
     public Member? Member { get; set; }
+
+    public Guid? EventId { get; set; }
+
+    [ForeignKey("EventId")]
+    public Event? Event { get; set; }
     
     [Required]
     public DateTime CheckInTime { get; set; } = DateTime.UtcNow;

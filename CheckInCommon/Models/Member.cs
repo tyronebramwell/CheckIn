@@ -16,7 +16,7 @@ public class Member
     public string LastName { get; set; } = string.Empty;
     
     [Required]
-    public DateTime DateOfBirth { get; set; }
+    public DateOnly DateOfBirth { get; set; }
     
     [Required]
     [MaxLength(100)]
@@ -42,6 +42,9 @@ public class Member
     [Required]
     [MaxLength(50)]
     public string Username { get; set; } = string.Empty;
+
+    public bool AllowEmail { get; set; }
+    public bool MustChangePassword { get; set; }
 
     [Required]
     [MaxLength(255)]

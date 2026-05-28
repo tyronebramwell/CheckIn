@@ -27,6 +27,7 @@ else
         <Columns>
             <PropertyColumn Property="x => x.FirstName" Title="First Name" />
             <PropertyColumn Property="x => x.LastName" Title="Last Name" />
+            <PropertyColumn Property="x => x.EventName" Title="Event" />
             <PropertyColumn Property="x => x.CheckInTime" Title="Check-In" Format="dd/MM/yyyy HH:mm" />
             <PropertyColumn Property="x => x.CheckOutTime" Title="Check-Out" Format="dd/MM/yyyy HH:mm" />
             <TemplateColumn Title="Status">
@@ -107,5 +108,6 @@ else
         string LastName,
         DateTime CheckInTime,
         DateTime? CheckOutTime,
-        string Guardian1Phone);
+        string Guardian1Phone,
+        string EventName);
 }

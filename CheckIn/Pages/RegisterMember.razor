@@ -80,6 +80,9 @@ else
                     <MudItem xs="12">
                         <MudTextField T="string" Label="Notes" Lines="3" @bind-Value="_newMember.Notes" Variant="Variant.Outlined" />
                     </MudItem>
+                    <MudItem xs="12">
+                        <MudCheckBox T="bool" Label="Email QR Code to member immediately" @bind-Value="_newMember.AllowEmail" Color="Color.Primary" />
+                    </MudItem>
                 </MudGrid>
 
                 <div class="mt-6">
@@ -106,7 +109,7 @@ else
         await _form.Validate();
         if (!_form.IsValid) return;
 
-        _newMember.DateOfBirth = _dob ?? DateTime.Today;
+        _newMember.DateOfBirth = DateOnly.FromDateTime(_dob ?? DateTime.Today);
         var response = await HttpClient.PostAsJsonAsync("/api/members", _newMember);
 
         if (response.IsSuccessStatusCode)

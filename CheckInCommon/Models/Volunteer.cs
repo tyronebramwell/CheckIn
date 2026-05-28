@@ -10,6 +10,10 @@ public class Volunteer
     [Required]
     [MaxLength(50)]
     public string Username { get; set; } = string.Empty;
+
+    [MaxLength(255)]
+    [EmailAddress]
+    public string? Email { get; set; }
     
     [Required]
     [MaxLength(255)]
@@ -20,4 +24,6 @@ public class Volunteer
     public bool CanAddUsers { get; set; }
     
     public bool CanManageVolunteers { get; set; }
+
+    public bool CanManageEvents { get; set; }
 }

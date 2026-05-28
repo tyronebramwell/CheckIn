@@ -1,0 +1,142 @@
+@page "/events"
+@using CheckInCommon.Models
+@inject HttpClient HttpClient
+@inject AuthService AuthService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Event Management</PageTitle>
+
+@if (!AuthService.IsLoggedIn || !AuthService.CanManageEvents)
+{
+    <MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
+        <MudAlert Severity="Severity.Error">Access Denied. You do not have permission to manage events.</MudAlert>
+    </MudContainer>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
+    <div class="d-flex justify-space-between align-center mb-6">
+        <div>
+            <MudText Typo="Typo.h4">Event Management</MudText>
+            <MudText Typo="Typo.body1" Class="grey-text">Create and manage simultaneous or recurring events.</MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">Add Event</MudButton>
+    </div>
+
+    <MudDataGrid Items="@_events" T="Event" Hover="true" Bordered="true" Striped="true">
+        <Columns>
+            <PropertyColumn Property="x => x.Name" Title="Event Name" />
+            <PropertyColumn Property="x => x.EventDate" Title="Date" Format="dd/MM/yyyy" />
+            <TemplateColumn CellClass="d-flex justify-end">
+                <CellTemplate>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteEvent(context.Item))" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+    </MudDataGrid>
+</MudContainer>
+
+<MudDialog @bind-Visible="_showCreateDialog" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Create New Event</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="_eventName" Label="Event Name" Variant="Variant.Outlined" Required="true" Class="mb-4" />
+        <MudDatePicker @bind-Date="_eventDate" Label="Start Date" Variant="Variant.Outlined" Required="true" Class="mb-4" />
+        
+        <MudDivider Class="my-4" />
+        <MudText Typo="Typo.subtitle2" Class="mb-2">Recurrence</MudText>
+        
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="string" Label="Repeat" @bind-Value="_repeatType" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("None")">Don't Repeat</MudSelectItem>
+                    <MudSelectItem Value="@("Weekly")">Weekly</MudSelectItem>
+                    <MudSelectItem Value="@("Bi-Weekly")">Bi-Weekly</MudSelectItem>
+                    <MudSelectItem Value="@("Monthly")">Monthly</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField T="int" Label="Number of Times" @bind-Value="_repeatCount" Min="1" Max="52" Variant="Variant.Outlined" Disabled="@(_repeatType == "None")" HelperText="Total instances to create" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _showCreateDialog = false">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveEvent">Create Event(s)</MudButton>
+    </DialogActions>
+</MudDialog>
+}
+
+@code {
+
+    private List<Event> _events = new();
+    private bool _showCreateDialog = false;
+    
+    private string _eventName = "";
+    private DateTime? _eventDate = DateTime.Today;
+    private string _repeatType = "None";
+    private int _repeatCount = 1;
+
+    private DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEvents();
+    }
+
+    private async Task LoadEvents()
+    {
+        var response = await HttpClient.GetAsync("/api/events");
+        if (response.IsSuccessStatusCode)
+        {
+            _events = await response.Content.ReadFromJsonAsync<List<Event>>() ?? new();
+        }
+    }
+
+    private void OpenCreateDialog()
+    {
+        _eventName = "";
+        _eventDate = DateTime.Today;
+        _repeatType = "None";
+        _repeatCount = 1;
+        _showCreateDialog = true;
+    }
+
+    private async Task SaveEvent()
+    {
+        if (string.IsNullOrWhiteSpace(_eventName) || _eventDate == null) return;
+        
+        var dto = new CreateEventDto(
+            _eventName, 
+            DateOnly.FromDateTime(_eventDate.Value), 
+            _repeatType, 
+            _repeatCount
+        );
+
+        var response = await HttpClient.PostAsJsonAsync("/api/events", dto);
+        if (response.IsSuccessStatusCode)
+        {
+            Snackbar.Add("Event(s) created successfully", Severity.Success);
+            _showCreateDialog = false;
+            await LoadEvents();
+        }
+    }
+
+    private async Task DeleteEvent(Event ev)
+    {
+        var confirmed = await DialogService.ShowMessageBox("Delete Event", $"Are you sure you want to delete '{ev.Name}'?", "Delete", "Cancel");
+        if (confirmed == true)
+        {
+            var response = await HttpClient.DeleteAsync($"/api/events/{ev.EventId}");
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Event deleted", Severity.Info);
+                await LoadEvents();
+            }
+        }
+    }
+
+    public record CreateEventDto(string Name, DateOnly EventDate, string RepeatType, int RepeatCount);
+}

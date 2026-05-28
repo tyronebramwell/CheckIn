@@ -35,13 +35,13 @@ else
             
             <MudForm @ref="_form" @bind-IsValid="@_success">
                 <MudGrid>
-                    <MudItem xs="12"><MudText Typo="Typo.h6">Quick Login (Optional)</MudText></MudItem>
+                    <MudItem xs="12"><MudText Typo="Typo.h6">Quick Login Details</MudText></MudItem>
                     
                     <MudItem xs="12" sm="6">
-                        <MudTextField T="string" Label="Username" @bind-Value="_memberDto.Username" Variant="Variant.Outlined" />
+                        <MudTextField T="string" Label="Username" Required="true" RequiredError="Username is required" @bind-Value="_memberDto.Username" Variant="Variant.Outlined" />
                     </MudItem>
                     <MudItem xs="12" sm="6">
-                        <MudTextField T="string" Label="New Password" @bind-Value="_memberDto.Password" Variant="Variant.Outlined" InputType="InputType.Password" HelperText="Leave blank to keep current password." />
+                        <MudTextField T="string" Label="Password" Required="true" RequiredError="Password is required" @bind-Value="_memberDto.Password" Variant="Variant.Outlined" InputType="InputType.Password" HelperText="Update password or leave as is." />
                     </MudItem>
                     
                     <MudItem xs="12"><MudDivider /></MudItem>
@@ -62,7 +62,7 @@ else
                         <MudTextField T="string" Label="Guardian 1 Phone" Required="true" @bind-Value="_memberDto.Guardian1Phone" Variant="Variant.Outlined" />
                     </MudItem>
                     <MudItem xs="12">
-                        <MudTextField T="string" Label="User Email" Required="true" @bind-Value="_memberDto.UserEmail" Variant="Variant.Outlined" Disabled="true" HelperText="Email is unique and cannot be changed here." />
+                        <MudTextField T="string" Label="User Email" Required="true" @bind-Value="_memberDto.UserEmail" Variant="Variant.Outlined" />
                     </MudItem>
                     
                     <MudItem xs="12"><MudDivider /></MudItem>
@@ -75,6 +75,9 @@ else
                     </MudItem>
                     <MudItem xs="12">
                         <MudTextField T="string" Label="Notes" Lines="3" @bind-Value="_memberDto.Notes" Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudCheckBox T="bool" Label="Allow emailing QR Code to this member" @bind-Value="_memberDto.AllowEmail" Color="Color.Primary" />
                     </MudItem>
                 </MudGrid>
 
@@ -131,7 +134,8 @@ else
             _memberDto = await response.Content.ReadFromJsonAsync<MemberRegistrationDto>();
             if (_memberDto != null)
             {
-                _dob = _memberDto.DateOfBirth;
+                _dob = _memberDto.DateOfBirth.ToDateTime(TimeOnly.MinValue);
+                _memberDto.Password = "********";
             }
         }
         else
@@ -149,7 +153,7 @@ else
         if (!_form.IsValid) return;
 
         _isSaving = true;
-        _memberDto.DateOfBirth = _dob ?? _memberDto.DateOfBirth;
+        _memberDto.DateOfBirth = DateOnly.FromDateTime(_dob ?? DateTime.Today);
         
         var response = await HttpClient.PutAsJsonAsync($"/api/members/{MemberId}", _memberDto);
 

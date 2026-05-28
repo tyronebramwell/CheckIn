@@ -21,8 +21,13 @@
 
         @if (AuthService.CanManageVolunteers)
         {
-            <MudNavLink Href="/admin" Icon="@Icons.Material.Filled.AdminPanelSettings">Admin</MudNavLink>
+            <MudNavLink Href="/volunteers" Icon="@Icons.Material.Filled.PeopleAlt">Volunteers</MudNavLink>
+            <MudNavLink Href="/config" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
             <MudNavLink Href="/logs" Icon="@Icons.Material.Filled.ListAlt">System Logs</MudNavLink>
+        }
+        @if (AuthService.CanManageEvents)
+        {
+            <MudNavLink Href="/events" Icon="@Icons.Material.Filled.Event">Events</MudNavLink>
         }
     }
 </MudNavMenu>

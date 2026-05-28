@@ -5,10 +5,14 @@
     <TitleContent>Add Volunteer</TitleContent>
     <DialogContent>
         <MudTextField @bind-Value="_username" Label="Username" Variant="Variant.Outlined" />
+        <MudTextField @bind-Value="_email" Label="Email Address" Variant="Variant.Outlined" InputType="InputType.Email" Class="mt-4" />
         <MudTextField @bind-Value="_password" Label="Password" Variant="Variant.Outlined" InputType="InputType.Password" Class="mt-4" />
-        <MudCheckBox @bind-Value="_canViewData" Label="Can View Data" />
-        <MudCheckBox @bind-Value="_canAddUsers" Label="Can Add Users" />
-        <MudCheckBox @bind-Value="_canManageVolunteers" Label="Can Manage Volunteers" />
+        
+        <MudText Typo="Typo.subtitle2" Class="mt-6">Permissions</MudText>
+        <MudCheckBox @bind-Value="_canViewData" Label="Can View Data" Color="Color.Primary" />
+        <MudCheckBox @bind-Value="_canAddUsers" Label="Can Add Members" Color="Color.Primary" />
+        <MudCheckBox @bind-Value="_canManageEvents" Label="Can Manage Events" Color="Color.Primary" />
+        <MudCheckBox @bind-Value="_canManageVolunteers" Label="Can Manage Volunteers (Admin)" Color="Color.Primary" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
@@ -20,16 +24,27 @@
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
 
     private string _username = "";
+    private string _email = "";
     private string _password = "";
     private bool _canViewData = true;
     private bool _canAddUsers = false;
+    private bool _canManageEvents = false;
     private bool _canManageVolunteers = false;
 
     private void Cancel() => MudDialog.Cancel();
 
     private async Task Submit()
     {
-        var dto = new { Username = _username, Password = _password, CanViewData = _canViewData, CanAddUsers = _canAddUsers, CanManageVolunteers = _canManageVolunteers };
+        var dto = new { 
+            Username = _username, 
+            Email = _email,
+            Password = _password, 
+            CanViewData = _canViewData, 
+            CanAddUsers = _canAddUsers, 
+            CanManageEvents = _canManageEvents,
+            CanManageVolunteers = _canManageVolunteers 
+        };
+        
         var response = await HttpClient.PostAsJsonAsync("/api/volunteers", dto);
         if (response.IsSuccessStatusCode)
         {
@@ -38,7 +53,8 @@
         }
         else
         {
-            Snackbar.Add("Failed to create volunteer", Severity.Error);
+            var error = await response.Content.ReadAsStringAsync();
+            Snackbar.Add(error ?? "Failed to create volunteer", Severity.Error);
         }
     }
 }

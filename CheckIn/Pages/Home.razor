@@ -1,6 +1,7 @@
 @page "/"
 @using System.Timers
 @using BlazorCameraStreamer
+@using CheckInCommon.Models
 @using CheckIn.Components.Backgrounds
 @inject AuthService AuthService
 @inject NavigationManager NavigationManager
@@ -164,7 +165,7 @@
                     <div class="d-flex gap-8">
                         @if (!_isMemberCheckedIn)
                         {
-                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Style="height: 120px; width: 220px; font-size: 1.5rem;" StartIcon="@Icons.Material.Filled.Login" OnClick="SelfCheckIn">Check In</MudButton>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Style="height: 120px; width: 220px; font-size: 1.5rem;" StartIcon="@Icons.Material.Filled.Login" OnClick="@(() => SelfCheckIn())">Check In</MudButton>
                         }
                         else
                         {
@@ -185,21 +186,32 @@
         <div style="width: 100%;">
             <MudText Typo="Typo.h3" Align="Align.Center" GutterBottom="true">Volunteer Dashboard</MudText>
             <MudGrid Class="mt-8">
-                <MudItem xs="12" sm="6">
-                    <MudPaper Class="pa-8 d-flex flex-column align-center" Elevation="4" Style="cursor: pointer" @onclick="@(() => NavigationManager.NavigateTo("/find-member"))">
+                <MudItem xs="12" sm="@(AuthService.CanManageEvents ? 4 : 6)">
+                    <MudPaper Class="pa-8 d-flex flex-column align-center" Elevation="4" Style="cursor: pointer; height: 100%" @onclick="@(() => NavigationManager.NavigateTo("/find-member"))">
                         <MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Large" Color="Color.Primary" Style="font-size: 4rem;" />
                         <MudText Typo="Typo.h5" Class="mt-4">Find Member</MudText>
                         <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">Search the master roster and check in members.</MudText>
                     </MudPaper>
                 </MudItem>
                 
-                <MudItem xs="12" sm="6">
-                    <MudPaper Class="pa-8 d-flex flex-column align-center" Elevation="4" Style="cursor: pointer" @onclick="@(() => NavigationManager.NavigateTo("/RecordView"))">
+                <MudItem xs="12" sm="@(AuthService.CanManageEvents ? 4 : 6)">
+                    <MudPaper Class="pa-8 d-flex flex-column align-center" Elevation="4" Style="cursor: pointer; height: 100%" @onclick="@(() => NavigationManager.NavigateTo("/RecordView"))">
                         <MudIcon Icon="@Icons.Material.Filled.RunningWithErrors" Size="Size.Large" Color="Color.Secondary" Style="font-size: 4rem;" />
                         <MudText Typo="Typo.h5" Class="mt-4">Active Manifest</MudText>
                         <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">View all members currently on-site.</MudText>
                     </MudPaper>
                 </MudItem>
+
+                @if (AuthService.CanManageEvents)
+                {
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Class="pa-8 d-flex flex-column align-center" Elevation="4" Style="cursor: pointer; height: 100%" @onclick="@(() => NavigationManager.NavigateTo("/events"))">
+                            <MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Large" Color="Color.Info" Style="font-size: 4rem;" />
+                            <MudText Typo="Typo.h5" Class="mt-4">Manage Events</MudText>
+                            <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">Add or schedule new events for the terminal.</MudText>
+                        </MudPaper>
+                    </MudItem>
+                }
             </MudGrid>
         </div>
     }
@@ -218,6 +230,8 @@
     private string _actionMessage = "";
     private string _actionMemberName = "";
     private bool _isProcessingQrAction = false;
+    private bool _isScanning = false;
+    private bool _isProcessingManualAction = false;
     private System.Timers.Timer? _qrScanTimer;
 
     protected override async Task OnInitializedAsync()
@@ -238,15 +252,15 @@
     private void StartQrScanning()
     {
         _qrScanTimer = new System.Timers.Timer(300); 
-        _qrScanTimer.Elapsed += async (s, e) => {
-            if (AuthService.IsLoggedIn) return;
-            await ScanForQrCode();
-        };
+        _qrScanTimer.Elapsed += async (s, e) => await ScanForQrCode();
         _qrScanTimer.Start();
     }
 
     private async Task ScanForQrCode()
     {
+        if (_isScanning || _isProcessingQrAction || AuthService.IsLoggedIn) return;
+        _isScanning = true;
+
         try {
             var result = await JSRuntime.InvokeAsync<string>("qrHelper.decode");
             
@@ -256,7 +270,9 @@
                     var parts = result.Split('|');
                     if (parts.Length == 2 && Guid.TryParse(parts[1], out var secret)) {
                         _isProcessingQrAction = true;
+                        _qrScanTimer?.Stop(); // Hard stop while processing
                         await HandleDirectQrAction(parts[0], secret);
+                        _qrScanTimer?.Start();
                     }
                 }
             }
@@ -268,12 +284,38 @@
                     await InvokeAsync(StateHasChanged);
                 }
             }
-        } catch { /* Fail silently */ }
+        } 
+        catch { /* Fail silently */ }
+        finally { _isScanning = false; }
     }
 
-    private async Task HandleDirectQrAction(string scannedUsername, Guid secret)
+    private async Task HandleDirectQrAction(string scannedUsername, Guid secret, Guid? eventId = null)
     {
-        var response = await HttpClient.PostAsJsonAsync("/api/attendance/qr-action", new { username = scannedUsername, qrSecret = secret });
+        var url = eventId.HasValue ? $"/api/attendance/qr-action?eventId={eventId}" : "/api/attendance/qr-action";
+        var response = await HttpClient.PostAsJsonAsync(url, new { username = scannedUsername, qrSecret = secret });
+
+        if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+        {
+            var conflict = await response.Content.ReadFromJsonAsync<QrConflictResponse>();
+            if (conflict != null && conflict.Events != null)
+            {
+                var parameters = new DialogParameters { ["Events"] = conflict.Events };
+                var options = new DialogOptions { CloseOnEscapeKey = true, BackdropClick = false };
+                var dialog = await DialogService.ShowAsync<CheckIn.Components.EventSelectionDialog>("Multiple Events", parameters, options);
+                var result = await dialog.Result;
+
+                if (result != null && !result.Canceled && result.Data is Guid selectedEventId)
+                {
+                    await HandleDirectQrAction(scannedUsername, secret, selectedEventId);
+                }
+                else
+                {
+                    _isProcessingQrAction = false;
+                    await InvokeAsync(StateHasChanged);
+                }
+                return;
+            }
+        }
 
         if (response.IsSuccessStatusCode)
         {
@@ -300,6 +342,10 @@
                 _actionResultClass = "";
                 _actionMessage = "";
                 _actionMemberName = "";
+                
+                // Allow a small buffer before re-enabling scanning
+                await Task.Delay(500);
+                _isProcessingQrAction = false;
                 await InvokeAsync(StateHasChanged);
             }
         }
@@ -367,21 +413,59 @@
         }
     }
 
-    private async Task SelfCheckIn()
+    private async Task SelfCheckIn(Guid? eventId = null)
     {
+        if (_isProcessingManualAction) return;
+        _isProcessingManualAction = true;
         _actionTaken = true;
-        var response = await HttpClient.PostAsync("/api/attendance/self-check-in", null);
-        if (response.IsSuccessStatusCode)
+
+        try
         {
-            _successActionText = "checking in";
-            await StartPostActionCountdown();
+            var url = eventId.HasValue ? $"/api/attendance/self-check-in?eventId={eventId}" : "/api/attendance/self-check-in";
+            var response = await HttpClient.PostAsync(url, null);
+
+            if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                var conflict = await response.Content.ReadFromJsonAsync<InactivityConflictResponse>();
+                if (conflict != null && conflict.Events != null)
+                {
+                    var parameters = new DialogParameters { ["Events"] = conflict.Events };
+                    var options = new DialogOptions { CloseOnEscapeKey = true, BackdropClick = false };
+                    var dialog = await DialogService.ShowAsync<CheckIn.Components.EventSelectionDialog>("Select Event", parameters, options);
+                    var result = await dialog.Result;
+
+                    if (result != null && !result.Canceled && result.Data is Guid selectedEventId)
+                    {
+                        _isProcessingManualAction = false; // Reset to allow the recursive call
+                        await SelfCheckIn(selectedEventId);
+                    }
+                    else
+                    {
+                        _actionTaken = false;
+                        _countdown = 15;
+                        _ = StartInactivityTimer();
+                    }
+                    return;
+                }
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                _successActionText = "checked in";
+                await StartPostActionCountdown();
+            }
+            else
+            {
+                _actionTaken = false;
+                Snackbar.Add("Check-in failed. Are you already checked in?", Severity.Warning);
+            }
         }
-        else
+        finally
         {
-            _actionTaken = false;
-            Snackbar.Add("Check-in failed. Are you already checked in?", Severity.Warning);
+            _isProcessingManualAction = false;
         }
     }
+
 
     private async Task SelfCheckOut()
     {
@@ -438,5 +522,8 @@
         public string FirstName { get; set; } = "";
         public string LastName { get; set; } = "";
     }
+
+    private record QrConflictResponse(string Action, List<Event> Events);
+    private record InactivityConflictResponse(string Message, List<Event> Events);
 }
 @inject IJSRuntime JSRuntime

@@ -19,8 +19,9 @@ else
         <Columns>
             <PropertyColumn Property="x => x.FirstName" Title="First Name" />
             <PropertyColumn Property="x => x.LastName" Title="Last Name" />
+            <PropertyColumn Property="x => x.EventName" Title="Event" />
             <PropertyColumn Property="x => x.CheckInTime" Title="Check-In Time" Format="dd/MM/yyyy HH:mm" />
-            <PropertyColumn Property="x => x.MedicalNotes" Title="Notes" />
+            <PropertyColumn Property="x => x.Notes" Title="Notes" />
             <TemplateColumn CellClass="d-flex justify-end gap-2">
                 <CellTemplate>
                     <MudIconButton Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Primary" OnClick="@(() => ViewProfile(context.Item.MemberId))" />
@@ -75,8 +76,9 @@ else
         Guid MemberId,
         string FirstName,
         string LastName,
-        string? MedicalNotes,
+        string? Notes,
         string Guardian1Phone,
         string? Guardian2Phone,
-        DateTime CheckInTime);
+        DateTime CheckInTime,
+        string EventName);
 }

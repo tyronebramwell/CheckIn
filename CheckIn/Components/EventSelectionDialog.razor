@@ -1,0 +1,29 @@
+@using CheckInCommon.Models
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h5">Select Event</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body1" Class="mb-4">Multiple events are scheduled for today. Which one are you attending?</MudText>
+        <div class="d-flex flex-column gap-3">
+            @foreach (var ev in Events)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" OnClick="@(() => Select(ev.EventId))" Style="height: 60px; font-size: 1.2rem;">
+                    @ev.Name
+                </MudButton>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public List<Event> Events { get; set; } = new();
+
+    private void Select(Guid eventId) => MudDialog.Close(DialogResult.Ok(eventId));
+    private void Cancel() => MudDialog.Cancel();
+}

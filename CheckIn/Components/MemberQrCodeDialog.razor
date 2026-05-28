@@ -37,6 +37,17 @@
                 @if (_isRegenerating) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2"/> }
                 Regenerate & Block Old QR
             </MudButton>
+
+            <MudButton Variant="Variant.Filled" 
+                       Color="Color.Primary" 
+                       Size="Size.Small" 
+                       StartIcon="@Icons.Material.Filled.Email" 
+                       OnClick="SendEmail" 
+                       Class="mt-4"
+                       Disabled="_isSendingEmail">
+                @if (_isSendingEmail) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2"/> }
+                Email QR Code to Member
+            </MudButton>
         </div>
     </DialogContent>
     <DialogActions>
@@ -52,6 +63,7 @@
 
     private string _qrSvg = "";
     private bool _isRegenerating = false;
+    private bool _isSendingEmail = false;
 
     protected override void OnInitialized()
     {
@@ -91,6 +103,22 @@
             Snackbar.Add("Failed to regenerate QR code.", Severity.Error);
         }
         _isRegenerating = false;
+    }
+
+    private async Task SendEmail()
+    {
+        _isSendingEmail = true;
+        var response = await HttpClient.PostAsync($"/api/members/{MemberId}/send-qr-email", null);
+        if (response.IsSuccessStatusCode)
+        {
+            Snackbar.Add("QR Code sent successfully via email.", Severity.Success);
+        }
+        else
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            Snackbar.Add(error ?? "Failed to send email.", Severity.Error);
+        }
+        _isSendingEmail = false;
     }
 
     private void Close() => MudDialog.Close();
