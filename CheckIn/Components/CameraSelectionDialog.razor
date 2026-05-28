@@ -1,0 +1,46 @@
+@using BlazorCameraStreamer
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Select Camera</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (Cameras == null)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else if (Cameras.Length == 0)
+        {
+            <MudText>No cameras found. Please check permissions.</MudText>
+        }
+        else
+        {
+            <div class="d-flex flex-column gap-3">
+                @foreach (var cam in Cameras)
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SelectCamera(cam.DeviceId))">
+                        @(string.IsNullOrEmpty(cam.Label) ? "Camera " + cam.DeviceId.Substring(0, 5) + "..." : cam.Label)
+                    </MudButton>
+                }
+            </div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public MediaDeviceInfoModel[]? Cameras { get; set; }
+
+    private void SelectCamera(string deviceId)
+    {
+        MudDialog.Close(DialogResult.Ok(deviceId));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+}

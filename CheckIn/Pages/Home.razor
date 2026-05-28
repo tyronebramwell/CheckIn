@@ -90,6 +90,10 @@
             <CameraStreamer @ref="_cameraStreamer"
                             Autostart="true"
                             Class="camera-background" />
+                            
+            <div style="position: fixed; top: 20px; left: 20px; z-index: 1000;">
+                <MudFab Color="Color.Primary" StartIcon="@Icons.Material.Filled.Cameraswitch" OnClick="OpenCameraSelection" />
+            </div>
         </ChildContent>
         <ErrorContent>
             <div style="position: fixed; top: 10px; right: 10px; z-index: 1000;">
@@ -255,6 +259,30 @@
         else if (!AuthService.IsLoggedIn)
         {
             StartQrScanning();
+        }
+    }
+
+    private async Task OpenCameraSelection()
+    {
+        if (_cameraStreamer == null) return;
+        
+        try
+        {
+            var cameras = await _cameraStreamer.GetCameraDevicesAsync();
+            var parameters = new DialogParameters { ["Cameras"] = cameras };
+            var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+            
+            var dialog = await DialogService.ShowAsync<CheckIn.Components.CameraSelectionDialog>("Select Camera", parameters, options);
+            var result = await dialog.Result;
+            
+            if (result != null && !result.Canceled && result.Data is string deviceId)
+            {
+                await _cameraStreamer.ChangeCameraAsync(deviceId);
+            }
+        }
+        catch
+        {
+            Snackbar.Add("Could not access camera list. Ensure you are on HTTPS.", Severity.Error);
         }
     }
 
