@@ -85,22 +85,47 @@
 
 @if (!AuthService.IsLoggedIn || AuthService.IsMember)
 {
-    <ErrorBoundary>
-        <ChildContent>
-            <CameraStreamer @ref="_cameraStreamer"
-                            Autostart="true"
-                            Class="camera-background" />
-                            
-            <div style="position: fixed; top: 20px; left: 20px; z-index: 1000;">
-                <MudFab Color="Color.Primary" StartIcon="@Icons.Material.Filled.Cameraswitch" OnClick="OpenCameraSelection" />
-            </div>
-        </ChildContent>
-        <ErrorContent>
-            <div style="position: fixed; top: 10px; right: 10px; z-index: 1000;">
-                <MudAlert Severity="Severity.Warning">Camera unavailable. Please ensure you are accessing the site via HTTPS.</MudAlert>
-            </div>
-        </ErrorContent>
-    </ErrorBoundary>
+    if (!_cameraSupported)
+    {
+        <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2000; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center;">
+            <MudIcon Icon="@Icons.Material.Filled.VideocamOff" Color="Color.Error" Style="font-size: 6rem; margin-bottom: 20px;" />
+            <MudText Typo="Typo.h4" Style="color: white; margin-bottom: 15px;">Camera Blocked by Browser</MudText>
+            <MudText Typo="Typo.body1" Style="color: #ccc; max-width: 600px; margin-bottom: 30px;">
+                Your browser has disabled camera access because this connection is not considered secure. Modern browsers require <b>HTTPS</b> to use hardware features.
+            </MudText>
+            
+            <MudPaper Class="pa-6 text-left" Style="max-width: 600px; width: 100%;">
+                <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-3">How to fix this:</MudText>
+                <ol style="line-height: 1.8;">
+                    <li>Ensure you are accessing the site via <b>HTTPS</b> (e.g., <code>https://100.x.x.x:8443</code>).</li>
+                    <li>If you get a privacy warning, click <b>Advanced -> Proceed</b>.</li>
+                    <li>If using Chrome on a local network, go to <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>, enable it, and add this site's address.</li>
+                </ol>
+                <div class="mt-6 d-flex justify-center">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CheckCameraSupport">Check Again</MudButton>
+                </div>
+            </MudPaper>
+        </div>
+    }
+    else
+    {
+        <ErrorBoundary>
+            <ChildContent>
+                <CameraStreamer @ref="_cameraStreamer"
+                                Autostart="true"
+                                Class="camera-background" />
+                                
+                <div style="position: fixed; top: 20px; left: 20px; z-index: 1000;">
+                    <MudFab Color="Color.Primary" StartIcon="@Icons.Material.Filled.Cameraswitch" OnClick="OpenCameraSelection" />
+                </div>
+            </ChildContent>
+            <ErrorContent>
+                <div style="position: fixed; top: 10px; right: 10px; z-index: 1000;">
+                    <MudAlert Severity="Severity.Warning">Camera unavailable. Please ensure you are accessing the site via HTTPS.</MudAlert>
+                </div>
+            </ErrorContent>
+        </ErrorBoundary>
+    }
 
     <BackgroundSwitcher />
 }
@@ -245,6 +270,7 @@
     private bool _isProcessingQrAction = false;
     private bool _isScanning = false;
     private bool _isProcessingManualAction = false;
+    private bool _cameraSupported = true;
     private System.Timers.Timer? _qrScanTimer;
 
     protected override async Task OnInitializedAsync()
@@ -256,9 +282,32 @@
             await GetAttendanceStatus();
             _ = StartInactivityTimer();
         }
-        else if (!AuthService.IsLoggedIn)
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && (!AuthService.IsLoggedIn || AuthService.IsMember))
         {
-            StartQrScanning();
+            await CheckCameraSupport();
+            
+            if (_cameraSupported && !AuthService.IsLoggedIn)
+            {
+                StartQrScanning();
+            }
+        }
+    }
+
+    private async Task CheckCameraSupport()
+    {
+        try 
+        {
+            _cameraSupported = await JSRuntime.InvokeAsync<bool>("eval", "!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)");
+            await InvokeAsync(StateHasChanged);
+        }
+        catch 
+        {
+            _cameraSupported = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
