@@ -12,7 +12,6 @@ obj/
 *.swo
 
 # Docker
-data/
 postgres_data/
 certs/
 drive/
