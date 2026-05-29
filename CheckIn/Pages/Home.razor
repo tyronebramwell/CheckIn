@@ -81,6 +81,11 @@
         75% { background-color: var(--mud-palette-warning); }
         100% { background-color: var(--mud-palette-success); }
     }
+
+    .active-camera-anim {
+        animation: color-cycle 20s infinite alternate !important;
+        color: white !important;
+    }
 </style>
 
 @if (!AuthService.IsLoggedIn || AuthService.IsMember)
@@ -119,11 +124,14 @@
         <ErrorBoundary>
             <ChildContent>
                 <CameraStreamer @ref="_cameraStreamer"
-                                Autostart="true"
+                                Autostart="false"
                                 Class="camera-background" />
                                 
                 <div style="position: fixed; top: 20px; left: 20px; z-index: 1000;">
-                    <MudFab Color="Color.Primary" StartIcon="@Icons.Material.Filled.Cameraswitch" OnClick="OpenCameraSelection" />
+                    <MudFab Class="@(_isCameraEnabled ? "active-camera-anim" : "")"
+                            Color="@(_isCameraEnabled ? Color.Primary : Color.Default)" 
+                            StartIcon="@Icons.Material.Filled.Cameraswitch" 
+                            OnClick="OpenCameraSelection" />
                 </div>
             </ChildContent>
             <ErrorContent>
@@ -279,6 +287,8 @@
     private bool _isProcessingManualAction = false;
     private bool _cameraSupported = false;
     private bool _isCheckingCamera = true;
+    private bool _isCameraEnabled = false;
+    private string? _currentDeviceId;
     private System.Timers.Timer? _qrScanTimer;
 
     protected override async Task OnInitializedAsync()
@@ -329,15 +339,39 @@
         try
         {
             var cameras = await _cameraStreamer.GetCameraDevicesAsync();
-            var parameters = new DialogParameters { ["Cameras"] = cameras };
+            var parameters = new DialogParameters 
+            { 
+                ["Cameras"] = cameras,
+                ["CurrentDeviceId"] = _currentDeviceId,
+                ["IsEnabled"] = _isCameraEnabled
+            };
             var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
             
-            var dialog = await DialogService.ShowAsync<CheckIn.Components.CameraSelectionDialog>("Select Camera", parameters, options);
+            var dialog = await DialogService.ShowAsync<CheckIn.Components.CameraSelectionDialog>("Camera Settings", parameters, options);
             var result = await dialog.Result;
             
-            if (result != null && !result.Canceled && result.Data is string deviceId)
+            if (result != null && !result.Canceled && result.Data is CheckIn.Components.CameraSelectionDialog.CameraSelectionResult selection)
             {
-                await _cameraStreamer.ChangeCameraAsync(deviceId);
+                _isCameraEnabled = selection.IsEnabled;
+                _currentDeviceId = selection.DeviceId;
+
+                if (_isCameraEnabled)
+                {
+                    if (!string.IsNullOrEmpty(_currentDeviceId))
+                    {
+                        await _cameraStreamer.ChangeCameraAsync(_currentDeviceId);
+                    }
+                    else
+                    {
+                        await _cameraStreamer.StartAsync();
+                    }
+                }
+                else
+                {
+                    await _cameraStreamer.StopAsync();
+                }
+
+                await InvokeAsync(StateHasChanged);
             }
         }
         catch
@@ -355,7 +389,7 @@
 
     private async Task ScanForQrCode()
     {
-        if (_isScanning || _isProcessingQrAction || AuthService.IsLoggedIn) return;
+        if (!_isCameraEnabled || _isScanning || _isProcessingQrAction || AuthService.IsLoggedIn) return;
         _isScanning = true;
 
         try {

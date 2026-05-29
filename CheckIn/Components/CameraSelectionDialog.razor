@@ -2,45 +2,77 @@
 
 <MudDialog>
     <TitleContent>
-        <MudText Typo="Typo.h6">Select Camera</MudText>
+        <MudText Typo="Typo.h6">Camera Settings</MudText>
     </TitleContent>
     <DialogContent>
-        @if (Cameras == null)
-        {
-            <MudProgressCircular Indeterminate="true" />
-        }
-        else if (Cameras.Length == 0)
-        {
-            <MudText>No cameras found. Please check permissions.</MudText>
-        }
-        else
-        {
-            <div class="d-flex flex-column gap-3">
-                @foreach (var cam in Cameras)
-                {
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SelectCamera(cam.DeviceId))">
-                        @(string.IsNullOrEmpty(cam.Label) ? "Camera " + cam.DeviceId.Substring(0, 5) + "..." : cam.Label)
-                    </MudButton>
-                }
-            </div>
-        }
+        <div class="d-flex flex-column gap-4">
+            <MudSwitch T="bool" @bind-Value="_isCameraEnabled" Label="Enable Camera" Color="Color.Primary" />
+
+            @if (Cameras == null)
+            {
+                <MudProgressCircular Indeterminate="true" />
+            }
+            else if (Cameras.Length == 0)
+            {
+                <MudText Color="Color.Error">No cameras found. Please check permissions.</MudText>
+            }
+            else
+            {
+                <MudSelect T="string" Label="Select Camera Device" @bind-Value="_selectedDeviceId" Disabled="!_isCameraEnabled">
+                    @foreach (var cam in Cameras)
+                    {
+                        <MudSelectItem Value="@cam.DeviceId">
+                            @(string.IsNullOrEmpty(cam.Label) ? "Camera " + cam.DeviceId.Substring(0, 5) + "..." : cam.Label)
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            }
+        </div>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Apply">Apply</MudButton>
     </DialogActions>
 </MudDialog>
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
     [Parameter] public MediaDeviceInfoModel[]? Cameras { get; set; }
+    [Parameter] public string? CurrentDeviceId { get; set; }
+    [Parameter] public bool IsEnabled { get; set; }
 
-    private void SelectCamera(string deviceId)
+    private string? _selectedDeviceId;
+    private bool _isCameraEnabled;
+
+    protected override void OnInitialized()
     {
-        MudDialog.Close(DialogResult.Ok(deviceId));
+        _selectedDeviceId = CurrentDeviceId;
+        _isCameraEnabled = IsEnabled;
+        
+        // If no device is selected but cameras are available, pick the first one
+        if (string.IsNullOrEmpty(_selectedDeviceId) && Cameras != null && Cameras.Length > 0)
+        {
+            _selectedDeviceId = Cameras[0].DeviceId;
+        }
+    }
+
+    private void Apply()
+    {
+        MudDialog.Close(DialogResult.Ok(new CameraSelectionResult 
+        { 
+            DeviceId = _selectedDeviceId, 
+            IsEnabled = _isCameraEnabled 
+        }));
     }
 
     private void Cancel()
     {
         MudDialog.Cancel();
+    }
+
+    public class CameraSelectionResult
+    {
+        public string? DeviceId { get; set; }
+        public bool IsEnabled { get; set; }
     }
 }

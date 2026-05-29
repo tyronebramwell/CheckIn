@@ -7,6 +7,7 @@ using CheckInApi.Data;
 using CheckInApi.Services;
 using CheckInCommon.Models;
 using System.Globalization;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -85,7 +86,12 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-app.UseHttpsRedirection();
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
+// app.UseHttpsRedirection(); // Commented out as SSL is terminated by Nginx or handled at Kestrel level with direct access
 
 // Configure the HTTP request pipeline.
 app.UseSwagger();

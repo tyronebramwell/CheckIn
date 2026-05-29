@@ -1,7 +1,15 @@
 #!/bin/sh
 
+# Handle API Base URL replacement
+APP_SETTINGS="/usr/share/nginx/html/appsettings.json"
+if [ -f "$APP_SETTINGS" ]; then
+    echo "Configuring API Base URL: ${API_BASE_URL:-default (empty)}"
+    # Use | as delimiter in case the URL contains slashes
+    sed -i "s|API_BASE_URL_PLACEHOLDER|${API_BASE_URL}|g" "$APP_SETTINGS"
+fi
+
 CERTS_DIR="/etc/nginx/certs"
-CRT_FILE="$CERTS_DIR/cert.pem"
+...CRT_FILE="$CERTS_DIR/cert.pem"
 KEY_FILE="$CERTS_DIR/key.pem"
 
 if [ ! -f "$CRT_FILE" ] || [ ! -f "$KEY_FILE" ]; then
