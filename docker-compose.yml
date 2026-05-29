@@ -24,16 +24,11 @@ services:
     environment:
       - ConnectionStrings__DefaultConnection=Host=db;Database=charity_event;Username=postgres;Password=password
       - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=https://+:443;http://+:80
-      - ASPNETCORE_HTTPS_PORT=5001
+      - ASPNETCORE_URLS=http://+:80
       - ALLOW_PUBLIC_REGISTRATION=${ALLOW_PUBLIC_REGISTRATION:-false}
-      - ASPNETCORE_Kestrel__Certificates__Default__Path=/https/cert.pem
-      - ASPNETCORE_Kestrel__Certificates__Default__KeyPath=/https/key.pem
     ports:
       - "5000:80"
-      - "5001:443"
     volumes:
-      - ./certs:/https:ro
       - ${EXPORT_PATH:-./drive}:/app/drive
     depends_on:
       db:
