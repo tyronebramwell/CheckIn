@@ -24,7 +24,7 @@
                 Scan this code at the terminal camera to login instantly.
             </MudText>
             <MudText Typo="Typo.caption" Class="mt-2 grey-text">
-                Format: @Username|@QrSecret.ToString().Substring(0, 8)...
+                Format: @Username|@GetTruncatedSecret()
             </MudText>
             
             <MudButton Variant="Variant.Outlined" 
@@ -68,6 +68,12 @@
     protected override void OnInitialized()
     {
         GenerateQrCode();
+    }
+
+    private string GetTruncatedSecret()
+    {
+        var secretString = QrSecret.ToString();
+        return secretString.Length > 8 ? $"{secretString.Substring(0, 8)}..." : secretString;
     }
 
     private void GenerateQrCode()
