@@ -31,7 +31,7 @@
     
     @if (_isCameraEnabled)
     {
-        <CameraStreamer @ref="_cameraStreamer" Class="camera-background" />
+        <CameraStreamer Autostart="true" Class="camera-background" />
     }
 
     <BackgroundSwitcher />
@@ -60,26 +60,11 @@
 </div>
 
 @code {
-    private CameraStreamer? _cameraStreamer;
     private bool _isCameraEnabled = false;
-    private bool _shouldStartCamera = false;
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (_shouldStartCamera && _cameraStreamer != null)
-        {
-            _shouldStartCamera = false;
-            await _cameraStreamer.StartAsync();
-        }
-    }
 
     private void ToggleCamera()
     {
         _isCameraEnabled = !_isCameraEnabled;
-        if (_isCameraEnabled)
-        {
-            _shouldStartCamera = true;
-        }
     }
 
     private async Task LogoutNow()
