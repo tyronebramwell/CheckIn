@@ -22,7 +22,7 @@
                     @foreach (var cam in Cameras)
                     {
                         <MudSelectItem Value="@cam.DeviceId">
-                            @(string.IsNullOrEmpty(cam.Label) ? "Camera " + (cam.DeviceId?.Length > 5 ? cam.DeviceId.Substring(0, 5) + "..." : cam.DeviceId) : cam.Label)
+                            @GetCameraDisplayName(cam)
                         </MudSelectItem>
                     }
                 </MudSelect>
@@ -54,6 +54,29 @@
         {
             _selectedDeviceId = Cameras[0].DeviceId;
         }
+    }
+
+    private string GetCameraDisplayName(MediaDeviceInfoModel camera)
+    {
+        // If a friendly label exists, use it.
+        if (!string.IsNullOrEmpty(camera.Label))
+        {
+            return camera.Label;
+        }
+
+        // Otherwise, create a name from the Device ID, with safety checks.
+        if (string.IsNullOrEmpty(camera.DeviceId))
+        {
+            return "Unnamed Camera";
+        }
+
+        // Safely truncate the device ID.
+        if (camera.DeviceId.Length > 8)
+        {
+            return $"Camera ({camera.DeviceId.Substring(0, 8)}...)";
+        }
+
+        return $"Camera ({camera.DeviceId})";
     }
 
     private void Apply()
