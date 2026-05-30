@@ -8,6 +8,8 @@ if [ -f "$APP_SETTINGS" ]; then
 fi
 
 CERTS_DIR="/etc/nginx/certs"
+CERT_FILE="$CERTS_DIR/cert.pem"
+KEY_FILE="$CERTS_DIR/key.pem"
 
 # WSL/Docker permission fix: Ensure certs are readable by the container's Nginx user
 if [ -d "$CERTS_DIR" ]; then
@@ -15,38 +17,19 @@ if [ -d "$CERTS_DIR" ]; then
     chmod -R 755 "$CERTS_DIR"
 fi
 
-# Define the expected Tailscale filenames
-TS_CRT_FILE="$CERTS_DIR/checkin.bigscale-chinstrap.ts.net.crt"
-TS_KEY_FILE="$CERTS_DIR/checkin.bigscale-chinstrap.ts.net.key"
-
-# Define the standard Nginx filenames
-STANDARD_CRT_FILE="$CERTS_DIR/cert.pem"
-STANDARD_KEY_FILE="$CERTS_DIR/key.pem"
-
-# Strategy: Ensure cert.pem and key.pem exist for Nginx to consume.
-if [ -f "$TS_CRT_FILE" ] && [ -f "$TS_KEY_FILE" ]; then
-    echo "Found Tailscale certificates."
-    
-    # If the standard files don't exist, create symlinks to the Tailscale ones
-    if [ ! -f "$STANDARD_CRT_FILE" ]; then
-         echo "Linking Tailscale crt to cert.pem..."
-         ln -s "$TS_CRT_FILE" "$STANDARD_CRT_FILE"
-    fi
-    
-    if [ ! -f "$STANDARD_KEY_FILE" ]; then
-         echo "Linking Tailscale key to key.pem..."
-         ln -s "$TS_KEY_FILE" "$STANDARD_KEY_FILE"
-    fi
-    
-    echo "Ready to serve HTTPS traffic with Tailscale certs."
-
-elif [ ! -f "$STANDARD_CRT_FILE" ] || [ ! -f "$STANDARD_KEY_FILE" ]; then
-    echo "Warning: No certificates found in $CERTS_DIR."
-    echo "Generating temporary self-signed certificate to prevent Nginx crash..."
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout "$STANDARD_KEY_FILE" -out "$STANDARD_CRT_FILE" -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"
-    echo "Fallback certificate generated."
+# --- Simplified Certificate Strategy ---
+# Always use cert.pem and key.pem. If they don't exist, create them.
+# This provides a consistent self-signed certificate for local development.
+if [ ! -f "$CERT_FILE" ] || [ ! -f "$KEY_FILE" ]; then
+    echo "Warning: No cert.pem/key.pem found in $CERTS_DIR."
+    echo "Generating a new, persistent self-signed certificate..."
+    openssl req -x509 -nodes -days 3650 -newkey rsa:4096 \
+        -keyout "$KEY_FILE" \
+        -out "$CERT_FILE" \
+        -subj "/C=US/ST=Local/L=Dev/O=CheckIn/CN=localhost"
+    echo "Self-signed certificate generated."
 else
-    echo "Standard cert.pem and key.pem already exist. Proceeding."
+    echo "Existing cert.pem and key.pem found. Using them."
 fi
 
 # Start Nginx
