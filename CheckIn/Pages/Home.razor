@@ -67,9 +67,9 @@
         _isCameraEnabled = !_isCameraEnabled;
     }
 
-    private async Task LogoutNow()
+    private void LogoutNow()
     {
-        await AuthService.Logout();
+        AuthService.Logout();
         NavigationManager.NavigateTo("/");
     }
 }

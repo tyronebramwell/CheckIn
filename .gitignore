@@ -20,3 +20,7 @@ drive/
 .DS_Store
 Thumbs.db
 .env
+
+# Deployment Scripts
+deploy.sh
+deploy.ps1
