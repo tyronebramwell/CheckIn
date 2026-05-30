@@ -22,7 +22,7 @@
                     @foreach (var cam in Cameras)
                     {
                         <MudSelectItem Value="@cam.DeviceId">
-                            @(string.IsNullOrEmpty(cam.Label) ? "Camera " + cam.DeviceId.Substring(0, 5) + "..." : cam.Label)
+                            @(string.IsNullOrEmpty(cam.Label) ? "Camera " + (cam.DeviceId?.Length > 5 ? cam.DeviceId.Substring(0, 5) + "..." : cam.DeviceId) : cam.Label)
                         </MudSelectItem>
                     }
                 </MudSelect>
