@@ -42,11 +42,6 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("IsMember", policy => policy.RequireClaim("UserType", "Member"));
 });
 
-builder.Services.AddHttpsRedirection(options =>
-{
-    options.HttpsPort = 5001;
-});
-
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -100,6 +95,8 @@ app.UseSwaggerUI(c =>
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Charity Event API V1");
     c.RoutePrefix = string.Empty;
 });
+
+app.UseCors("AllowAllOrigins");
 
 app.MapGet("/health", () => Results.Ok("API is running")).AllowAnonymous();
 

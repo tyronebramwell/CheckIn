@@ -86,6 +86,30 @@
         animation: color-cycle 20s infinite alternate !important;
         color: white !important;
     }
+    
+    /* Make sure the camera streamer fills the background */
+    .camera-background {
+        position: fixed !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        min-width: 100% !important;
+        min-height: 100% !important;
+        width: auto !important;
+        height: auto !important;
+        z-index: -100 !important;
+        object-fit: cover !important;
+    }
+    
+    .camera-background video {
+        position: fixed !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        min-width: 100% !important;
+        min-height: 100% !important;
+        width: auto !important;
+        height: auto !important;
+        object-fit: cover !important;
+    }
 </style>
 
 @if (!AuthService.IsLoggedIn || AuthService.IsMember)

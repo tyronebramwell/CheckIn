@@ -9,7 +9,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ${DB_DATA_PATH:-./postgres_data}:/var/lib/postgresql/data
+      - ${DB_DATA_PATH:-./postgres_data}:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -40,8 +40,8 @@ services:
     environment:
       - API_BASE_URL=${API_BASE_URL:-}
     ports:
-      - "8080:80"
-      - "8443:443"
+      - "80:80"
+      - "443:443"
     volumes:
       - ./certs:/etc/nginx/certs
     depends_on:

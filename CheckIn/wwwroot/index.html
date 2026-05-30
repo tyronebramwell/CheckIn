@@ -23,6 +23,35 @@
             return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && navigator.mediaDevices.enumerateDevices);
         };
 
+        // New helper to explicitly request the rear camera
+        window.startRearCamera = async function(videoElementId) {
+            const video = document.getElementById(videoElementId);
+            if (!video) return false;
+
+            const constraints = {
+                video: {
+                    facingMode: { exact: "environment" }
+                }
+            };
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                return true;
+            } catch (e) {
+                console.error("Could not start rear camera, trying any camera...", e);
+                // Fallback to any camera if the rear one fails
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    video.srcObject = stream;
+                    return true;
+                } catch (e2) {
+                    console.error("Failed to start any camera.", e2);
+                    return false;
+                }
+            }
+        };
+
         window.qrHelper = {
             decode: function () {
                 const video = document.querySelector('video');
