@@ -141,8 +141,10 @@
 
         if (_isCameraEnabled)
         {
-            // Let the component render and then start the camera
-            await Task.Delay(50); 
+            // This is the key change. We wait for the next render cycle to complete,
+            // which ensures the _cameraStreamer component has been created.
+            await InvokeAsync(StateHasChanged);
+
             if (_cameraStreamer != null)
             {
                 await _cameraStreamer.StartAsync();
