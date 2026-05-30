@@ -204,7 +204,7 @@
     private void OnVideoStarted()
     {
         _isScanning = true;
-        _scanTimer = new Timer(500); // Scan every 500ms
+        _scanTimer = new Timer(500); 
         _scanTimer.Elapsed += async (sender, e) => await ScanFrame();
         _scanTimer.AutoReset = true;
         _scanTimer.Enabled = true;
@@ -212,11 +212,10 @@
 
     private async Task ScanFrame()
     {
-        if (!_isCameraEnabled || _isScanning || _isProcessingQrAction || AuthService.IsLoggedIn) return;
+        if (!_isCameraEnabled || !_isScanning || _isProcessingQrAction || AuthService.IsLoggedIn) return;
 
         try
         {
-            _isScanning = true;
             var qrCode = await JSRuntime.InvokeAsync<string>("qrHelper.decode");
 
             if (!string.IsNullOrEmpty(qrCode))
@@ -235,7 +234,7 @@
         }
         finally
         {
-            _isScanning = false;
+            // No need to set _isScanning to false here, as the timer will continue
         }
     }
 
