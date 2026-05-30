@@ -11,12 +11,6 @@
 <PageTitle>Check-In</PageTitle>
 
 <style>
-    /* Force the main layout to be transparent so we can see the camera */
-    .active-camera-anim {
-        animation: pulse 2s infinite;
-    }
-
-    /* Make sure the camera streamer fills the background */
     .camera-background {
         position: fixed;
         top: 0;
@@ -24,7 +18,7 @@
         width: 100vw;
         height: 100vh;
         object-fit: cover;
-        z-index: -1; /* Behind all other content */
+        z-index: -1;
     }
 
     .camera-background video {
@@ -37,220 +31,60 @@
     
     @if (_isCameraEnabled)
     {
-        <CameraStreamer @ref="_cameraStreamer"
-                        Class="camera-background" />
+        <CameraStreamer @ref="_cameraStreamer" Class="camera-background" />
     }
 
     <BackgroundSwitcher />
 
     <div class="d-flex flex-column align-center justify-center" style="z-index: 1; text-align: center; color: white; text-shadow: 1px 1px 3px black;">
         
-        @if (_isCheckingCamera)
+        @if (!AuthService.IsLoggedIn)
         {
-            <MudProgressCircular Indeterminate="true" Size="Size.Large" />
-            <MudText Typo="Typo.h5" Style="color: white; margin-top: 20px;">Checking Camera Access...</MudText>
-        }
-        else if (!_cameraSupported)
-        {
-            <MudIcon Icon="@Icons.Material.Filled.NoPhotography" Size="Size.Large" Style="font-size: 4rem;" />
-            <MudText Typo="Typo.h4" Style="color: white; margin-bottom: 15px;">Camera Blocked by Browser</MudText>
-            <MudText Class="mb-4">
-                Your browser has disabled camera access because this connection is not considered secure. Modern browsers require <b>HTTPS</b> to use hardware features.
+            <MudButton Variant="Variant.Filled" 
+                       Color="Color.Primary" 
+                       OnClick="ToggleCamera"
+                       Style="height: 120px; width: 300px; font-size: 2rem; border-radius: 15px;"
+                       StartIcon="@Icons.Material.Filled.QrCodeScanner">
+                Scan QR Code
+            </MudButton>
+            <MudText Typo="Typo.h6" Class="mt-4">
+                Or <MudLink Href="/login" Style="color: white; font-weight: bold;">Login as a Volunteer</MudLink>
             </MudText>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CheckCameraSupport">Check Again</MudButton>
         }
         else
         {
-            <!-- Logged Out View -->
-            @if (!AuthService.IsLoggedIn)
-            {
-                <MudButton Variant="Variant.Filled" 
-                           Color="Color.Primary" 
-                           OnClick="ToggleCamera"
-                           Style="height: 120px; width: 300px; font-size: 2rem; border-radius: 15px;"
-                           StartIcon="@Icons.Material.Filled.QrCodeScanner">
-                    Scan QR Code
-                </MudButton>
-                
-                <MudText Typo="Typo.h6" Class="mt-4">
-                    Or <MudLink Href="/login" Style="color: white; font-weight: bold;">Login as a Volunteer</MudLink>
-                </MudText>
-            }
-            <!-- Logged In View -->
-            else
-            {
-                <MudFab Class="@(_isCameraEnabled ? "active-camera-anim" : "")"
-                        Color="@(_isCameraEnabled ? Color.Primary : Color.Default)" 
-                        StartIcon="@Icons.Material.Filled.Cameraswitch" 
-                        OnClick="OpenCameraSelection" />
-
-                @if (_isCameraEnabled)
-                {
-                    <MudText Typo="Typo.h5" Class="mt-4">
-                        Show your QR code to the camera for instant Check-In/Out!
-                    </MudText>
-                }
-            }
+            <MudText Typo="Typo.h4" Class="mb-4">Welcome, @AuthService.CurrentUser?.Username</MudText>
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="LogoutNow" Class="mt-6">Logout Now</MudButton>
         }
     </div>
 </div>
 
 @code {
     private CameraStreamer? _cameraStreamer;
-    private bool _cameraSupported = false;
-    private bool _isCheckingCamera = true;
     private bool _isCameraEnabled = false;
-    private bool _shouldStartCamera = false; // Flag to control camera start
-    private string? _currentDeviceId;
-    private bool _isScanning = false;
-    private bool _isProcessingQrAction = false;
-    private Timer? _scanTimer;
+    private bool _shouldStartCamera = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
-        {
-            await CheckCameraSupport();
-            StateHasChanged();
-        }
-
-        // If we need to start the camera and the component is now ready
         if (_shouldStartCamera && _cameraStreamer != null)
         {
-            _shouldStartCamera = false; // Reset the flag
+            _shouldStartCamera = false;
             await _cameraStreamer.StartAsync();
         }
     }
 
-    private async Task CheckCameraSupport()
+    private void ToggleCamera()
     {
-        _isCheckingCamera = true;
-        try
-        {
-            _cameraSupported = await JSRuntime.InvokeAsync<bool>("checkCameraSupport");
-        }
-        catch
-        {
-            _cameraSupported = false;
-        }
-        _isCheckingCamera = false;
-    }
-
-    private async Task ToggleCamera()
-    {
-        if (!_cameraSupported)
-        {
-            Snackbar.Add("Camera access is not supported or is blocked by your browser.", Severity.Error);
-            return;
-        }
-
         _isCameraEnabled = !_isCameraEnabled;
-
         if (_isCameraEnabled)
         {
-            // Set the flag to start the camera on the next render cycle.
             _shouldStartCamera = true;
         }
-        else
-        {
-            await StopScanning();
-        }
     }
 
-    private async Task OpenCameraSelection()
+    private async Task LogoutNow()
     {
-        if (_cameraStreamer == null) return;
-
-        try
-        {
-            var cameras = await _cameraStreamer.GetCameraDevicesAsync();
-            var parameters = new DialogParameters
-            {
-                ["Cameras"] = cameras,
-                ["CurrentDeviceId"] = _currentDeviceId,
-                ["IsEnabled"] = _isCameraEnabled
-            };
-            var options = new DialogOptions { CloseOnEscapeKey = true };
-            var dialog = await DialogService.ShowAsync<CheckIn.Components.CameraSelectionDialog>("Camera Settings", parameters, options);
-            var result = await dialog.Result;
-
-            if (result != null && !result.Canceled && result.Data is CheckIn.Components.CameraSelectionDialog.CameraSelectionResult selection)
-            {
-                _isCameraEnabled = selection.IsEnabled;
-                if (_isCameraEnabled)
-                {
-                    if (_currentDeviceId != selection.DeviceId)
-                    {
-                        _currentDeviceId = selection.DeviceId;
-                        await _cameraStreamer.ChangeCameraAsync(_currentDeviceId);
-                    }
-                    else if (!_isScanning)
-                    {
-                        await _cameraStreamer.StartAsync();
-                    }
-                }
-                else
-                {
-                    await StopScanning();
-                }
-            }
-        }
-        catch (Exception)
-        {
-            Snackbar.Add("Could not access camera list. Ensure you are on HTTPS.", Severity.Error);
-        }
-    }
-
-    // private void OnVideoStarted()
-    // {
-    //     _isScanning = true;
-    //     _scanTimer = new Timer(500); 
-    //     _scanTimer.Elapsed += async (sender, e) => await ScanFrame();
-    //     _scanTimer.AutoReset = true;
-    //     _scanTimer.Enabled = true;
-    // }
-
-    private async Task ScanFrame()
-    {
-        if (!_isCameraEnabled || !_isScanning || _isProcessingQrAction || AuthService.IsLoggedIn) return;
-
-        try
-        {
-            var qrCode = await JSRuntime.InvokeAsync<string>("qrHelper.decode");
-
-            if (!string.IsNullOrEmpty(qrCode))
-            {
-                _isProcessingQrAction = true;
-                await StopScanning();
-                
-                // Handle QR code logic here
-                Snackbar.Add($"QR Code Found: {qrCode}", Severity.Success);
-
-                // Re-enable scanning after a delay
-                await Task.Delay(3000);
-                _isProcessingQrAction = false;
-                if (_isCameraEnabled) await ToggleCamera(); // Restart camera
-            }
-        }
-        finally
-        {
-            // No need to set _isScanning to false here, as the timer will continue
-        }
-    }
-
-    private async Task StopScanning()
-    {
-        _scanTimer?.Stop();
-        _scanTimer?.Dispose();
-        _isScanning = false;
-        if (_cameraStreamer != null)
-        {
-            await _cameraStreamer.StopAsync();
-        }
-    }
-
-    public void Dispose()
-    {
-        _scanTimer?.Dispose();
+        await AuthService.Logout();
+        NavigationManager.NavigateTo("/");
     }
 }
