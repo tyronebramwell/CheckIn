@@ -38,7 +38,6 @@
     @if (_isCameraEnabled)
     {
         <CameraStreamer @ref="_cameraStreamer"
-                        VideoStarted="OnVideoStarted"
                         Class="camera-background" />
     }
 
@@ -77,6 +76,7 @@
                     Or <MudLink Href="/login" Style="color: white; font-weight: bold;">Login as a Volunteer</MudLink>
                 </MudText>
             }
+            <!-- Logged In View -->
             else
             {
                 <MudFab Class="@(_isCameraEnabled ? "active-camera-anim" : "")"
@@ -201,14 +201,14 @@
         }
     }
 
-    private void OnVideoStarted()
-    {
-        _isScanning = true;
-        _scanTimer = new Timer(500); 
-        _scanTimer.Elapsed += async (sender, e) => await ScanFrame();
-        _scanTimer.AutoReset = true;
-        _scanTimer.Enabled = true;
-    }
+    // private void OnVideoStarted()
+    // {
+    //     _isScanning = true;
+    //     _scanTimer = new Timer(500); 
+    //     _scanTimer.Elapsed += async (sender, e) => await ScanFrame();
+    //     _scanTimer.AutoReset = true;
+    //     _scanTimer.Enabled = true;
+    // }
 
     private async Task ScanFrame()
     {
