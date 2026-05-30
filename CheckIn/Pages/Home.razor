@@ -38,7 +38,7 @@
     @if (_isCameraEnabled)
     {
         <CameraStreamer @ref="_cameraStreamer"
-                        OnVideoStarted="OnVideoStarted"
+                        VideoStarted="OnVideoStarted"
                         Class="camera-background" />
     }
 
@@ -77,7 +77,6 @@
                     Or <MudLink Href="/login" Style="color: white; font-weight: bold;">Login as a Volunteer</MudLink>
                 </MudText>
             }
-            <!-- Logged In View -->
             else
             {
                 <MudFab Class="@(_isCameraEnabled ? "active-camera-anim" : "")"
@@ -101,6 +100,7 @@
     private bool _cameraSupported = false;
     private bool _isCheckingCamera = true;
     private bool _isCameraEnabled = false;
+    private bool _shouldStartCamera = false; // Flag to control camera start
     private string? _currentDeviceId;
     private bool _isScanning = false;
     private bool _isProcessingQrAction = false;
@@ -112,6 +112,13 @@
         {
             await CheckCameraSupport();
             StateHasChanged();
+        }
+
+        // If we need to start the camera and the component is now ready
+        if (_shouldStartCamera && _cameraStreamer != null)
+        {
+            _shouldStartCamera = false; // Reset the flag
+            await _cameraStreamer.StartAsync();
         }
     }
 
@@ -141,14 +148,8 @@
 
         if (_isCameraEnabled)
         {
-            // This is the key change. We wait for the next render cycle to complete,
-            // which ensures the _cameraStreamer component has been created.
-            await InvokeAsync(StateHasChanged);
-
-            if (_cameraStreamer != null)
-            {
-                await _cameraStreamer.StartAsync();
-            }
+            // Set the flag to start the camera on the next render cycle.
+            _shouldStartCamera = true;
         }
         else
         {
