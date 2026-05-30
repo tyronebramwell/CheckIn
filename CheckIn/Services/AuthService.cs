@@ -1,129 +1,139 @@
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Security.Claims;
-using System.Threading.Tasks;
-using CheckIn.Shared.Models;
+using System.Text;
 
-namespace CheckIn.Services
+namespace CheckIn.Services;
+
+public class AuthService
 {
-    public class AuthService
+    private readonly HttpClient _httpClient;
+    private string? _authHeaderValue;
+
+    public AuthService(HttpClient httpClient)
     {
-        private readonly HttpClient _httpClient;
-        private AuthenticationHeaderValue? _authHeaderValue;
+        _httpClient = httpClient;
+    }
 
-        public string? UserType { get; private set; }
-        public bool IsLoggedIn => _authHeaderValue != null;
-        public bool IsVolunteer => UserType == "Volunteer";
-        public bool IsMember => UserType == "Member";
-        public bool CanViewData { get; private set; }
-        public bool CanAddUsers { get; private set; }
-        public bool CanManageVolunteers { get; private set; }
-        public bool CanManageEvents { get; private set; }
-        public bool MustChangePassword { get; private set; }
-        public User? CurrentUser { get; private set; } // Added this property
+    public string? Username { get; private set; }
+    public string? UserType { get; private set; }
+    public bool IsLoggedIn => _authHeaderValue != null;
+    public bool IsVolunteer => UserType == "Volunteer";
+    public bool IsMember => UserType == "Member";
+    public bool CanViewData { get; private set; }
+    public bool CanAddUsers { get; private set; }
+    public bool CanManageVolunteers { get; private set; }
+    public bool CanManageEvents { get; private set; }
+    public bool MustChangePassword { get; private set; }
 
-        public AuthService(HttpClient httpClient)
+    public event Action? OnAuthStateChanged;
+
+    public async Task<bool> LoginAsync(string username, string password)
+    {
+        try
         {
-            _httpClient = httpClient;
-        }
+            var authValue = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
+            var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", authValue);
 
-        public async Task<bool> LoginAsync(string username, string password)
-        {
-            var response = await _httpClient.PostAsJsonAsync("/api/auth/login", new { username, password });
-            if (!response.IsSuccessStatusCode)
+            var response = await _httpClient.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
             {
-                Logout();
-                return false;
-            }
-
-            var result = await response.Content.ReadFromJsonAsync<LoginResult>();
-            if (result == null || string.IsNullOrEmpty(result.Token))
-            {
-                Logout();
-                return false;
-            }
-
-            _authHeaderValue = new AuthenticationHeaderValue("Basic", result.Token);
-            _httpClient.DefaultRequestHeaders.Authorization = _authHeaderValue;
-
-            var claims = ParseClaimsFromJwt(result.Token);
-            UserType = claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value;
-            CanViewData = claims.Any(c => c.Type == "CanViewData" && c.Value == "true");
-            CanAddUsers = claims.Any(c => c.Type == "CanAddUsers" && c.Value == "true");
-            CanManageVolunteers = claims.Any(c => c.Type == "CanManageVolunteers" && c.Value == "true");
-            CanManageEvents = claims.Any(c => c.Type == "CanManageEvents" && c.Value == "true");
-            MustChangePassword = claims.Any(c => c.Type == "MustChangePassword" && c.Value == "true");
-
-            CurrentUser = new User
-            {
-                Username = claims.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value ?? "",
-                // Populate other user properties if available in the token
-            };
-
-            return true;
-        }
-
-        public void Logout()
-        {
-            _authHeaderValue = null;
-            _httpClient.DefaultRequestHeaders.Authorization = null;
-            UserType = null;
-            CanViewData = false;
-            CanAddUsers = false;
-            CanManageVolunteers = false;
-            CanManageEvents = false;
-            MustChangePassword = false;
-            CurrentUser = null;
-        }
-
-        private static IEnumerable<Claim> ParseClaimsFromJwt(string jwt)
-        {
-            var claims = new List<Claim>();
-            var payload = jwt.Split('.')[1];
-            var jsonBytes = ParseBase64WithoutPadding(payload);
-            var keyValuePairs = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(jsonBytes);
-
-            if (keyValuePairs != null)
-            {
-                keyValuePairs.TryGetValue(ClaimTypes.Role, out var roles);
-                if (roles != null)
+                var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
+                if (result != null)
                 {
-                    if (roles.ToString()!.Trim().StartsWith("["))
-                    {
-                        var parsedRoles = System.Text.Json.JsonSerializer.Deserialize<string[]>(roles.ToString()!);
-                        claims.AddRange(parsedRoles!.Select(r => new Claim(ClaimTypes.Role, r)));
-                    }
-                    else
-                    {
-                        claims.Add(new Claim(ClaimTypes.Role, roles.ToString()!));
-                    }
+                    _authHeaderValue = authValue;
+                    Username = username;
+                    UserType = result.UserType;
+                    CanViewData = result.CanViewData;
+                    CanAddUsers = result.CanAddUsers;
+                    CanManageVolunteers = result.CanManageVolunteers;
+                    CanManageEvents = result.CanManageEvents;
+                    MustChangePassword = result.MustChangePassword;
+                    
+                    _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", _authHeaderValue);
+                    OnAuthStateChanged?.Invoke();
+                    return true;
                 }
-
-                // Add other claims
-                claims.Add(new Claim(ClaimTypes.Name, keyValuePairs["unique_name"]?.ToString() ?? ""));
-                if (keyValuePairs.ContainsKey("CanViewData")) claims.Add(new Claim("CanViewData", keyValuePairs["CanViewData"].ToString()!.ToLower()));
-                if (keyValuePairs.ContainsKey("CanAddUsers")) claims.Add(new Claim("CanAddUsers", keyValuePairs["CanAddUsers"].ToString()!.ToLower()));
-                if (keyValuePairs.ContainsKey("CanManageVolunteers")) claims.Add(new Claim("CanManageVolunteers", keyValuePairs["CanManageVolunteers"].ToString()!.ToLower()));
-                if (keyValuePairs.ContainsKey("CanManageEvents")) claims.Add(new Claim("CanManageEvents", keyValuePairs["CanManageEvents"].ToString()!.ToLower()));
-                if (keyValuePairs.ContainsKey("MustChangePassword")) claims.Add(new Claim("MustChangePassword", keyValuePairs["MustChangePassword"].ToString()!.ToLower()));
             }
-            return claims;
         }
-
-        private static byte[] ParseBase64WithoutPadding(string base64)
+        catch (Exception)
         {
-            switch (base64.Length % 4)
-            {
-                case 2: base64 += "=="; break;
-                case 3: base64 += "="; break;
-            }
-            return Convert.FromBase64String(base64);
+            // Usually 'Failed to fetch' due to untrusted SSL cert on port 5001
+            return false;
         }
+
+        return false;
     }
 
-    public class LoginResult
+    public async Task<bool> ForgotPasswordAsync(string email)
     {
-        public string Token { get; set; } = "";
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("/api/auth/forgot-password", new { email });
+            return response.IsSuccessStatusCode;
+        }
+        catch { return false; }
     }
+
+    public async Task<bool> ChangePasswordResetAsync(string newPassword)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("/api/auth/change-password-reset", new { newPassword });
+            if (response.IsSuccessStatusCode)
+            {
+                MustChangePassword = false;
+                OnAuthStateChanged?.Invoke();
+                return true;
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    public async Task<bool> QrLoginAsync(string username, Guid qrSecret)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("/api/auth/qr-login", new { username, qrSecret });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<QrLoginResponse>();
+                if (result != null)
+                {
+                    Username = result.Username;
+                    UserType = result.UserType;
+                    MustChangePassword = false;
+                    
+                    _authHeaderValue = "QR_AUTH";
+                    _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("QR", result.MemberId.ToString());
+                    
+                    OnAuthStateChanged?.Invoke();
+                    return true;
+                }
+            }
+        }
+        catch { }
+
+        return false;
+    }
+
+    public void Logout()
+    {
+        _authHeaderValue = null;
+        Username = null;
+        UserType = null;
+        CanViewData = false;
+        CanAddUsers = false;
+        CanManageVolunteers = false;
+        CanManageEvents = false;
+        MustChangePassword = false;
+        _httpClient.DefaultRequestHeaders.Authorization = null;
+        OnAuthStateChanged?.Invoke();
+    }
+
+    private record LoginResponse(string UserType, bool CanViewData, bool CanAddUsers, bool CanManageVolunteers, bool CanManageEvents, bool MustChangePassword);
+    private record QrLoginResponse(string UserType, string Username, Guid MemberId);
 }
