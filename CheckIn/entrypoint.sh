@@ -11,9 +11,10 @@ CERTS_DIR="/etc/nginx/certs"
 CERT_FILE="$CERTS_DIR/cert.pem"
 KEY_FILE="$CERTS_DIR/key.pem"
 
-# WSL/Docker permission fix: Ensure certs are readable by the container's Nginx user
+# WSL/Docker permission fix: Ensure files are readable by the container's Nginx user
+echo "Applying permissions to web root and certs for Nginx..."
+chmod -R 755 /usr/share/nginx/html
 if [ -d "$CERTS_DIR" ]; then
-    echo "Applying permissions to certs directory for WSL/Docker compatibility..."
     chmod -R 755 "$CERTS_DIR"
 fi
 
