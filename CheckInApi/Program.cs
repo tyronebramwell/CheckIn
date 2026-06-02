@@ -65,7 +65,6 @@ builder.Services.AddSwaggerGen(c =>
             new List<string>()
         }
     });
-
 });
 
 builder.Services.AddCors(options =>
@@ -85,12 +84,21 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 });
 
 // Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.UseWebAssemblyDebugging();
+}
+
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Charity Event API V1");
-    c.RoutePrefix = string.Empty;
+    // Move swagger away from root so UI can own it
+    c.RoutePrefix = "swagger";
 });
+
+app.UseBlazorFrameworkFiles();
+app.MapStaticAssets(); // New .NET 10 method for optimized static assets
 
 app.UseCors("AllowAllOrigins");
 
@@ -105,6 +113,9 @@ app.MapEventEndpoints();
 app.MapVolunteerEndpoints();
 app.MapAttendanceEndpoints();
 app.MapLogEndpoints();
+
+// Final fallback for Blazor SPA routing
+app.MapFallbackToFile("index.html");
 
 // Ensure database is created and seed initial volunteer if needed
 using (var scope = app.Services.CreateScope())

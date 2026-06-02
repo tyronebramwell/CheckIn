@@ -15,45 +15,22 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - charity-net
 
-  api:
+  app:
     build:
       context: .
       dockerfile: CheckInApi/Dockerfile
-    container_name: charity_api
+    container_name: charity_app
     environment:
       - ConnectionStrings__DefaultConnection=Host=db;Database=charity_event;Username=postgres;Password=password
-      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_HTTP_PORTS=80
-      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
-      - ALLOW_PUBLIC_REGISTRATION=${ALLOW_PUBLIC_REGISTRATION:-false}
-    volumes:
-      - ${EXPORT_PATH:-./drive}:/app/drive
-    networks:
-      - charity-net
-    depends_on:
-      db:
-        condition: service_healthy
-
-  ui:
-    build:
-      context: .
-      dockerfile: CheckIn/Dockerfile
-    container_name: charity_ui
-    environment:
-      - API_BASE_URL=${API_BASE_URL:-}
+      - ASPNETCORE_HTTPS_PORTS=443
     ports:
       - "8080:80"
       - "8443:443"
     volumes:
-      - ./certs:/etc/nginx/certs
-    networks:
-      - charity-net
+      - ${EXPORT_PATH:-./drive}:/app/drive
     depends_on:
-      - api
-
-networks:
-  charity-net:
-    driver: bridge
+      db:
+        condition: service_healthy
