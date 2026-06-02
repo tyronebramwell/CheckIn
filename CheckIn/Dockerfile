@@ -5,17 +5,18 @@ COPY ["CheckInCommon/CheckInCommon.csproj", "CheckInCommon/"]
 RUN dotnet restore "CheckIn/CheckIn.csproj"
 COPY . .
 WORKDIR "/src/CheckIn"
-RUN dotnet publish "CheckIn.csproj" -c Release -o /app/publish
-
-# Verify the output structure during build (this will show in logs if build fails or if verbose)
-RUN ls -R /app/publish/wwwroot
+RUN dotnet publish "CheckIn.csproj" -c Release -o /app/publish /p:StaticWebAssetsEnabled=true
 
 FROM nginx:alpine AS final
 # Install openssl for certificate generation
 RUN apk add --no-cache openssl
 
+# Ensure the target directory exists and is clean
+RUN mkdir -p /usr/share/nginx/html
 WORKDIR /usr/share/nginx/html
+
 # Copy the contents of the published wwwroot folder to the nginx html root
+# We use the specific subfolder path to ensure we get the actual static assets
 COPY --from=build /app/publish/wwwroot/ .
 COPY CheckIn/nginx.conf /etc/nginx/conf.d/default.conf
 
