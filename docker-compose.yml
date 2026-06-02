@@ -24,10 +24,15 @@ services:
     environment:
       - ConnectionStrings__DefaultConnection=Host=db;Database=charity_event;Username=postgres;Password=password
       - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=http://+:80
+      - ASPNETCORE_HTTP_PORTS=80
+      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
       - ALLOW_PUBLIC_REGISTRATION=${ALLOW_PUBLIC_REGISTRATION:-false}
     volumes:
       - ${EXPORT_PATH:-./drive}:/app/drive
+    networks:
+      default:
+        aliases:
+          - api
     depends_on:
       db:
         condition: service_healthy
@@ -41,6 +46,7 @@ services:
       - API_BASE_URL=${API_BASE_URL:-}
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./certs:/etc/nginx/certs
     depends_on:
