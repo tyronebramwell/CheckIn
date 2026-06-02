@@ -32,8 +32,8 @@ services:
       - ASPNETCORE_Kestrel__Certificates__Default__KeyPath=/etc/certs/key.pem
       - ALLOW_PUBLIC_REGISTRATION=${ALLOW_PUBLIC_REGISTRATION:-false}
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
+      - "8443:443"
     volumes:
       - ${EXPORT_PATH:-./drive}:/app/drive
       - ./certs:/etc/certs
