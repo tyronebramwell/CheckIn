@@ -5,14 +5,14 @@ COPY ["CheckInCommon/CheckInCommon.csproj", "CheckInCommon/"]
 RUN dotnet restore "CheckIn/CheckIn.csproj"
 COPY . .
 WORKDIR "/src/CheckIn"
-RUN dotnet build "CheckIn.csproj" -c Release -o /app/build
 RUN dotnet publish "CheckIn.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 FROM nginx:alpine AS final
-# Install openssl to convert PFX
-RUN apk add --no-network --no-cache openssl || apk add --no-cache openssl
+# Install openssl for certificate generation
+RUN apk add --no-cache openssl
 
 WORKDIR /usr/share/nginx/html
+# Note: In .NET 9/10, WASM publish output is in the wwwroot folder of the output path
 COPY --from=build /app/publish/wwwroot .
 COPY CheckIn/nginx.conf /etc/nginx/conf.d/default.conf
 
