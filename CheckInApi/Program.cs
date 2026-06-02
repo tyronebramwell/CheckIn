@@ -106,8 +106,6 @@ app.MapVolunteerEndpoints();
 app.MapAttendanceEndpoints();
 app.MapLogEndpoints();
 
-app.MapStaticAssets();
-
 // Ensure database is created and seed initial volunteer if needed
 using (var scope = app.Services.CreateScope())
 {

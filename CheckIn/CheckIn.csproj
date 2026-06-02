@@ -8,6 +8,7 @@
         <WasmFingerprintAssets>false</WasmFingerprintAssets>
         <FingerprintUrls>false</FingerprintUrls>
         <StaticWebAssetsFingerprintUrls>false</StaticWebAssetsFingerprintUrls>
+        <StaticWebAssetFingerprintingEnabled>false</StaticWebAssetFingerprintingEnabled>
         <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
     </PropertyGroup>
 
