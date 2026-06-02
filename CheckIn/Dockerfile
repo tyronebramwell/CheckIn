@@ -5,7 +5,7 @@ COPY ["CheckInCommon/CheckInCommon.csproj", "CheckInCommon/"]
 RUN dotnet restore "CheckIn/CheckIn.csproj"
 COPY . .
 WORKDIR "/src/CheckIn"
-RUN dotnet publish "CheckIn.csproj" -c Release -o /app/publish /p:StaticWebAssetsEnabled=true
+RUN dotnet publish "CheckIn.csproj" -c Release -o /app/publish 
 
 # DIAGNOSTIC: List EVERYTHING in the publish directory to see where .NET 10 puts things
 RUN echo "--- PUBLISH DIRECTORY STRUCTURE ---" && \
