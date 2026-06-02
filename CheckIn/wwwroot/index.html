@@ -169,6 +169,10 @@
     </div>
     <script src="_content/MudBlazor/MudBlazor.min.js?v=20260522"></script>
     <script src="_framework/blazor.webassembly.js"></script>
+    <script>
+        // Blazor bootstrapper will automatically resolve the fingerprinted file (e.g. blazor.webassembly.xxxxx.js)
+        // if we leave the script tag as is, but in some environments we need to help it.
+    </script>
 </body>
 
 </html>
