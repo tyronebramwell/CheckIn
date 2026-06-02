@@ -37,10 +37,11 @@ fi
 echo "Diagnostic: Checking for blazor.webassembly.js..."
 if [ -f "/usr/share/nginx/html/_framework/blazor.webassembly.js" ]; then
     echo "SUCCESS: blazor.webassembly.js found."
+    ls -l "/usr/share/nginx/html/_framework/blazor.webassembly.js"
 else
     echo "ERROR: blazor.webassembly.js NOT FOUND at /usr/share/nginx/html/_framework/"
-    echo "Full directory listing of web root:"
-    ls -R /usr/share/nginx/html
+    echo "Full directory listing of web root (depth 2):"
+    find /usr/share/nginx/html -maxdepth 2
 fi
 
 # Start Nginx

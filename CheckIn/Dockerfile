@@ -7,6 +7,10 @@ COPY . .
 WORKDIR "/src/CheckIn"
 RUN dotnet publish "CheckIn.csproj" -c Release -o /app/publish /p:StaticWebAssetsEnabled=true
 
+# DIAGNOSTIC: Find where the files actually are
+RUN echo "Searching for blazor.webassembly.js in publish output..." && \
+    find /app/publish -name "blazor.webassembly.js"
+
 FROM nginx:alpine AS final
 # Install openssl for certificate generation
 RUN apk add --no-cache openssl
