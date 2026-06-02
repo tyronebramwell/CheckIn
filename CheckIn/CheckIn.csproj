@@ -6,6 +6,8 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <BlazorWebAssemblyLoadAllGlobalizationData>true</BlazorWebAssemblyLoadAllGlobalizationData>
         <WasmFingerprintAssets>false</WasmFingerprintAssets>
+        <FingerprintUrls>false</FingerprintUrls>
+        <StaticWebAssetsFingerprintUrls>false</StaticWebAssetsFingerprintUrls>
         <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
     </PropertyGroup>
 
