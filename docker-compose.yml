@@ -15,6 +15,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - charity-net
 
   app:
     build:
@@ -26,11 +28,21 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_HTTP_PORTS=80
       - ASPNETCORE_HTTPS_PORTS=443
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=/etc/certs/cert.pem
+      - ASPNETCORE_Kestrel__Certificates__Default__KeyPath=/etc/certs/key.pem
+      - ALLOW_PUBLIC_REGISTRATION=${ALLOW_PUBLIC_REGISTRATION:-false}
     ports:
-      - "8080:80"
-      - "8443:443"
+      - "80:80"
+      - "443:443"
     volumes:
       - ${EXPORT_PATH:-./drive}:/app/drive
+      - ./certs:/etc/certs
+    networks:
+      - charity-net
     depends_on:
       db:
         condition: service_healthy
+
+networks:
+  charity-net:
+    driver: bridge

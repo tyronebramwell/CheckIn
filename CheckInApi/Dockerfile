@@ -3,6 +3,9 @@ WORKDIR /app
 EXPOSE 80
 EXPOSE 443
 
+# Install openssl for certificate generation
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
@@ -28,4 +31,8 @@ COPY --from=build /app/publish .
 # Create the drive directory for CSV exports
 RUN mkdir -p /app/drive && chmod 777 /app/drive
 
-ENTRYPOINT ["dotnet", "CheckInApi.dll"]
+# Copy and setup entrypoint
+COPY CheckInApi/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
