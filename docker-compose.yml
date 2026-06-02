@@ -45,8 +45,7 @@ services:
     environment:
       - API_BASE_URL=${API_BASE_URL:-}
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
     volumes:
       - ./certs:/etc/nginx/certs
     depends_on:
