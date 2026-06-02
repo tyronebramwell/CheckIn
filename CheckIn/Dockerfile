@@ -7,21 +7,27 @@ COPY . .
 WORKDIR "/src/CheckIn"
 RUN dotnet publish "CheckIn.csproj" -c Release -o /app/publish /p:StaticWebAssetsEnabled=true
 
-# DIAGNOSTIC: Find where the files actually are
-RUN echo "Searching for blazor.webassembly.js in publish output..." && \
-    find /app/publish -name "blazor.webassembly.js"
-
 FROM nginx:alpine AS final
 # Install openssl for certificate generation
 RUN apk add --no-cache openssl
 
-# Ensure the target directory exists and is clean
-RUN mkdir -p /usr/share/nginx/html
 WORKDIR /usr/share/nginx/html
-
 # Copy the contents of the published wwwroot folder to the nginx html root
-# We use the specific subfolder path to ensure we get the actual static assets
 COPY --from=build /app/publish/wwwroot/ .
+
+# .NET 10 Fix: Ensure blazor.webassembly.js is reachable by its non-hashed name
+# This handles cases where the browser importmap resolution fails
+RUN if [ -d "_framework" ]; then \
+        cd _framework && \
+        FILE=$(ls blazor.webassembly.*.js | head -n 1) && \
+        if [ ! -f "blazor.webassembly.js" ] && [ ! -z "$FILE" ]; then \
+            cp "$FILE" blazor.webassembly.js; \
+            [ -f "$FILE.gz" ] && cp "$FILE.gz" blazor.webassembly.js.gz; \
+            [ -f "$FILE.br" ] && cp "$FILE.br" blazor.webassembly.js.br; \
+            echo "Created stable symlink for $FILE"; \
+        fi; \
+    fi
+
 COPY CheckIn/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Setup the entrypoint script for auto-conversion
