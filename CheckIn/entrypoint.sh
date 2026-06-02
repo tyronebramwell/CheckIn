@@ -34,7 +34,10 @@ else
 fi
 
 # Diagnostic: Log the existence of framework files
-echo "Diagnostic: Checking for blazor.webassembly.js..."
+echo "Diagnostic: Checking for critical framework files..."
+find /usr/share/nginx/html -name "blazor.boot.json"
+find /usr/share/nginx/html -name "blazor.webassembly.js"
+
 if [ -f "/usr/share/nginx/html/_framework/blazor.webassembly.js" ]; then
     echo "SUCCESS: blazor.webassembly.js found."
     ls -l "/usr/share/nginx/html/_framework/blazor.webassembly.js"

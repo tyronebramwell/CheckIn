@@ -7,6 +7,10 @@ COPY . .
 WORKDIR "/src/CheckIn"
 RUN dotnet publish "CheckIn.csproj" -c Release -o /app/publish /p:StaticWebAssetsEnabled=true
 
+# DIAGNOSTIC: List EVERYTHING in the publish directory to see where .NET 10 puts things
+RUN echo "--- PUBLISH DIRECTORY STRUCTURE ---" && \
+    find /app/publish -maxdepth 4
+
 FROM nginx:alpine AS final
 # Install openssl for certificate generation
 RUN apk add --no-cache openssl
@@ -15,17 +19,17 @@ WORKDIR /usr/share/nginx/html
 # Copy the contents of the published wwwroot folder to the nginx html root
 COPY --from=build /app/publish/wwwroot/ .
 
-# .NET 10 Fix: Ensure blazor.webassembly.js is reachable by its non-hashed name
-# This handles cases where the browser importmap resolution fails
+# .NET 10 "De-Hashing" Fix:
+# If .NET 10 ignores our csproj settings and hashes files anyway, 
+# we create stable-named copies so Nginx/index.html can find them.
 RUN if [ -d "_framework" ]; then \
         cd _framework && \
-        FILE=$(ls blazor.webassembly.*.js | head -n 1) && \
-        if [ ! -f "blazor.webassembly.js" ] && [ ! -z "$FILE" ]; then \
-            cp "$FILE" blazor.webassembly.js; \
-            [ -f "$FILE.gz" ] && cp "$FILE.gz" blazor.webassembly.js.gz; \
-            [ -f "$FILE.br" ] && cp "$FILE.br" blazor.webassembly.js.br; \
-            echo "Created stable symlink for $FILE"; \
-        fi; \
+        echo "De-hashing files in _framework..." && \
+        for f in blazor.webassembly.*.js; do [ -e "$f" ] && cp "$f" blazor.webassembly.js; break; done && \
+        for f in blazor.boot.*.json; do [ -e "$f" ] && cp "$f" blazor.boot.json; break; done && \
+        for f in dotnet.native.*.wasm; do [ -e "$f" ] && cp "$f" dotnet.native.wasm; break; done && \
+        for f in dotnet.runtime.*.js; do [ -e "$f" ] && cp "$f" dotnet.runtime.js; break; done && \
+        echo "Stable copies created."; \
     fi
 
 COPY CheckIn/nginx.conf /etc/nginx/conf.d/default.conf
