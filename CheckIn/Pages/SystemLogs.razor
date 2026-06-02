@@ -1,8 +1,4 @@
 @page "/logs"
-@using CheckInCommon.Models
-@inject HttpClient HttpClient
-@inject AuthService AuthService
-@inject ISnackbar Snackbar
 
 <PageTitle>System Logs</PageTitle>
 
@@ -35,25 +31,4 @@ else
             <PropertyColumn Property="x => x.DeviceInfo" Title="Device" />
         </Columns>
     </MudDataGrid>
-}
-
-@code {
-    private List<SystemLog> _logs = new();
-
-    protected override async Task OnInitializedAsync()
-    {
-        if (AuthService.IsLoggedIn && AuthService.CanManageVolunteers)
-        {
-            await LoadLogs();
-        }
-    }
-
-    private async Task LoadLogs()
-    {
-        var response = await HttpClient.GetAsync("/api/logs");
-        if (response.IsSuccessStatusCode)
-        {
-            _logs = await response.Content.ReadFromJsonAsync<List<SystemLog>>() ?? new();
-        }
-    }
 }

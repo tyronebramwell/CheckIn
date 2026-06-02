@@ -1,9 +1,6 @@
 @page "/login"
 @using BlazorCameraStreamer
 @using CheckIn.Components.Backgrounds
-@inject AuthService AuthService
-@inject NavigationManager NavigationManager
-@inject ISnackbar Snackbar
 
 <PageTitle>Login</PageTitle>
 
@@ -45,53 +42,3 @@
         Build v1.3
     </MudText>
 </div>
-
-@code {
-    private CameraStreamer? _cameraStreamer;
-    private string _username = "";
-    private string _password = "";
-    private bool _isLoggingIn = false;
-
-    [Inject] private IDialogService DialogService { get; set; } = null!;
-
-    private async Task OnLogin()
-    {
-        if (string.IsNullOrWhiteSpace(_username) || string.IsNullOrWhiteSpace(_password))
-        {
-            Snackbar.Add("Please enter both username and password.", Severity.Warning);
-            return;
-        }
-
-        _isLoggingIn = true;
-        if (await AuthService.LoginAsync(_username, _password))
-        {
-            if (AuthService.MustChangePassword)
-            {
-                var options = new DialogOptions { CloseOnEscapeKey = false, BackdropClick = false };
-                var dialog = await DialogService.ShowAsync<CheckIn.Components.ForcePasswordResetDialog>("Update Your Password", options);
-                var result = await dialog.Result;
-                
-                if (result == null || result.Canceled)
-                {
-                    AuthService.Logout();
-                    _isLoggingIn = false;
-                    return;
-                }
-            }
-
-            Snackbar.Add("Login successful", Severity.Success);
-            NavigationManager.NavigateTo("/");
-        }
-        else
-        {
-            Snackbar.Add("Login failed. Please check your credentials.", Severity.Error);
-        }
-        _isLoggingIn = false;
-    }
-
-    private async Task OpenForgotPasswordDialog()
-    {
-        var options = new DialogOptions { CloseOnEscapeKey = true };
-        await DialogService.ShowAsync<CheckIn.Components.ForgotPasswordDialog>("Forgotten Password", options);
-    }
-}

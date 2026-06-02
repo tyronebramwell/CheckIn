@@ -1,6 +1,3 @@
-@implements IDisposable
-@inject AuthService AuthService
-
 <MudNavMenu>
     @if (AuthService.IsLoggedIn)
     {
@@ -31,15 +28,3 @@
         }
     }
 </MudNavMenu>
-
-@code {
-    protected override void OnInitialized()
-    {
-        AuthService.OnAuthStateChanged += StateHasChanged;
-    }
-
-    public void Dispose()
-    {
-        AuthService.OnAuthStateChanged -= StateHasChanged;
-    }
-}

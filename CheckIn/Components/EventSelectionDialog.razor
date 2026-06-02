@@ -1,5 +1,3 @@
-@using CheckInCommon.Models
-
 <MudDialog>
     <TitleContent>
         <MudText Typo="Typo.h5">Select Event</MudText>
@@ -19,11 +17,3 @@
         <MudButton OnClick="Cancel">Cancel</MudButton>
     </DialogActions>
 </MudDialog>
-
-@code {
-    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
-    [Parameter] public List<Event> Events { get; set; } = new();
-
-    private void Select(Guid eventId) => MudDialog.Close(DialogResult.Ok(eventId));
-    private void Cancel() => MudDialog.Cancel();
-}

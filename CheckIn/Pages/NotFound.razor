@@ -1,6 +1,5 @@
 ﻿@page "/not-found"
 @layout MainLayout
-@inject NavigationManager navManager
 <MudStack Style="align-content: center; margin: auto;">
     <h2 style="text-align: center">Not Found</h2>
     <MudImage Style="width: 30%; align-self: center" Src="@ErrorImage()"></MudImage>
@@ -8,22 +7,3 @@
 <MudText style="text-align: center">Please go back to Home Page</MudText>
 <MudButton Style="width: 30%; align-self: center" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Home" OnClick="@HomePage">Home</MudButton>
 </MudStack>
-@code{
-    void HomePage()
-    {
-        navManager.NavigateTo("/");
-    }
-
-    string ErrorImage()
-    {
-        string[] images = new string[]
-        {
-            "images/Error/1.gif",
-            "images/Error/2.gif",
-            "images/Error/Error.webp",
-        };
-        Random rand = new Random();
-        int index = rand.Next(images.Length);
-        return images[index];
-    }
-}

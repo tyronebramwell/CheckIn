@@ -1,8 +1,4 @@
 @inherits LayoutComponentBase
-@implements IDisposable
-@inject AuthService AuthService
-@inject NavigationManager NavigationManager
-
 <MudThemeProvider />
 <MudPopoverProvider />
 <MudDialogProvider />
@@ -38,73 +34,3 @@
         </MudContainer>
     </MudMainContent>
 </MudLayout>
-
-@code {
-    bool _drawerOpen = false;
-
-    private bool ShouldHideAppBar
-    {
-        get
-        {
-            try
-            {
-                var relativePath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri).ToLower();
-                var isRoot = string.IsNullOrEmpty(relativePath) || relativePath == "/";
-                var isLogin = relativePath.Contains("login");
-                
-                // Hide AppBar if unauthenticated or if a Member is on the home/login pages
-                if (!AuthService.IsLoggedIn) return isRoot || isLogin;
-                if (AuthService.IsMember) return isRoot || isLogin;
-            }
-            catch { /* Fallback to showing AppBar if path parsing fails */ }
-            
-            return false;
-        }
-    }
-
-    protected override void OnInitialized()
-    {
-        AuthService.OnAuthStateChanged += OnAuthStateChanged;
-        NavigationManager.LocationChanged += HandleLocationChanged;
-    }
-
-    private void OnAuthStateChanged()
-    {
-        if (ShouldHideAppBar)
-        {
-            _drawerOpen = false;
-        }
-        StateHasChanged();
-    }
-
-    private void HandleLocationChanged(object? sender, LocationChangedEventArgs e)
-    {
-        if (ShouldHideAppBar)
-        {
-            _drawerOpen = false;
-        }
-        StateHasChanged();
-    }
-
-    public void Dispose()
-    {
-        AuthService.OnAuthStateChanged -= OnAuthStateChanged;
-        NavigationManager.LocationChanged -= HandleLocationChanged;
-    }
-
-    void DrawerToggle()
-    {
-        _drawerOpen = !_drawerOpen;
-    }
-
-    void Login()
-    {
-        NavigationManager.NavigateTo("/login");
-    }
-
-    void Logout()
-    {
-        AuthService.Logout();
-        NavigationManager.NavigateTo("/");
-    }
-}

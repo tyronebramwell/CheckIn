@@ -1,10 +1,4 @@
 @page "/public-register"
-@using CheckInCommon.Models
-@using System.ComponentModel.DataAnnotations
-@inject HttpClient HttpClient
-@inject AuthService AuthService
-@inject ISnackbar Snackbar
-@inject NavigationManager NavigationManager
 
 <PageTitle>New Member Registration</PageTitle>
 
@@ -90,47 +84,3 @@
         </MudPaper>
     </MudContainer>
 </div>
-
-@code {
-    private MudForm _form = null!;
-    private bool _success;
-    private bool _isProcessing = false;
-    private string? _serverError;
-    private MemberRegistrationDto _newMember = new();
-    private DateTime? _dob = DateTime.Today;
-
-    private async Task RegisterAndCheckIn()
-    {
-        _serverError = null;
-        await _form.Validate();
-        if (!_form.IsValid) return;
-
-        _isProcessing = true;
-        _newMember.DateOfBirth = DateOnly.FromDateTime(_dob ?? DateTime.Today);
-        
-        var response = await HttpClient.PostAsJsonAsync("/api/members/public", _newMember);
-
-        if (response.IsSuccessStatusCode)
-        {
-            var member = await response.Content.ReadFromJsonAsync<Member>();
-            if (member != null)
-            {
-                if (await AuthService.LoginAsync(_newMember.Username, _newMember.Password))
-                {
-                    var checkInResponse = await HttpClient.PostAsync("/api/attendance/self-check-in", null);
-                    if (checkInResponse.IsSuccessStatusCode)
-                    {
-                        Snackbar.Add("Welcome! You are registered and checked in.", Severity.Success);
-                        NavigationManager.NavigateTo("/");
-                    }
-                }
-            }
-        }
-        else
-        {
-            _serverError = await response.Content.ReadAsStringAsync();
-            if (string.IsNullOrEmpty(_serverError)) _serverError = "Registration failed. Please try again.";
-        }
-        _isProcessing = false;
-    }
-}
