@@ -15,6 +15,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - charity-net
 
   api:
     build:
@@ -30,9 +32,7 @@ services:
     volumes:
       - ${EXPORT_PATH:-./drive}:/app/drive
     networks:
-      default:
-        aliases:
-          - api
+      - charity-net
     depends_on:
       db:
         condition: service_healthy
@@ -46,7 +46,14 @@ services:
       - API_BASE_URL=${API_BASE_URL:-}
     ports:
       - "8080:80"
+      - "8443:443"
     volumes:
       - ./certs:/etc/nginx/certs
+    networks:
+      - charity-net
     depends_on:
       - api
+
+networks:
+  charity-net:
+    driver: bridge

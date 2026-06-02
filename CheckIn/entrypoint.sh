@@ -33,6 +33,16 @@ else
     echo "Existing cert.pem and key.pem found. Using them."
 fi
 
+# Diagnostic: Log the existence of framework files
+echo "Diagnostic: Checking for blazor.webassembly.js..."
+if [ -f "/usr/share/nginx/html/_framework/blazor.webassembly.js" ]; then
+    echo "SUCCESS: blazor.webassembly.js found."
+else
+    echo "ERROR: blazor.webassembly.js NOT FOUND at /usr/share/nginx/html/_framework/"
+    echo "Full directory listing of web root:"
+    ls -R /usr/share/nginx/html
+fi
+
 # Start Nginx
 echo "Starting Nginx..."
 exec nginx -g "daemon off;"
